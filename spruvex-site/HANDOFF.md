@@ -1,0 +1,366 @@
+# HANDOFF — SpruVex R Marketing Site
+
+مرجع تقني شامل لهذا المشروع: ماذا بُني، كيف يعمل، كيف يرتبط بـ spruvex-r، وأين
+تقف الأمور الآن. اقرأ هذا الملف كاملًا قبل أي تعديل — خصوصًا قسم **"المشاكل
+غير المحلولة"** في الأسفل.
+
+---
+
+## 1) ما هو هذا المشروع
+
+موقع تسويقي (Next.js 16، App Router) لمنتج **SpruVex R** — نظام SaaS لإدارة
+المطاعم/نقاط البيع في السعودية (متعدد المستأجرين). هذا المستودع **ليس** المنتج
+نفسه؛ المنتج الفعلي (لوحة تحكم + API) في مستودع منفصل اسمه **`spruvex-r`**.
+
+مسؤولية هذا الموقع:
+- صفحة رئيسية تسويقية + صفحة أسعار.
+- نموذج "تجربة مجانية 14 يومًا" (`/contact`) — **يُنشئ حسابًا حقيقيًا فعليًا**
+  في spruvex-r عبر API عام (وليس مجرد نموذج تواصل).
+- تدفّق اشتراك مدفوع عبر تحويل بنكي يدوي (`/pay/[plan]`) بمراجعة إدارية.
+- لوحة إدارة داخلية بسيطة (`/admin`) لمراجعة طلبات التجربة والدفع.
+
+---
+
+## 2) المكدس التقني
+
+- **Next.js 16** (App Router, Turbopack), **React 19**, **TypeScript**, **Tailwind v4**
+- **Zod** للتحقق من المدخلات (`src/lib/validation.ts`)
+- **better-sqlite3** — قاعدة بيانات محلية لهذا الموقع فقط (تفاصيل §5)
+- **Resend** (`resend` npm package) — بريد ترحيب/تنبيه إدارة (§6)
+- **framer-motion** للحركات، **lucide-react** للأيقونات
+- **jose** لجلسة إدارة JWT (`/admin`)
+- النشر مخطَّط له على **Render** (Node Web Service + Persistent Disk) — انظر
+  `render.yaml` بجذر المستودع (خارج مجلد `spruvex-site/`). **ليس** Vercel،
+  لأن SQLite يحتاج قرصًا دائمًا لا يوفّره الاستضافة عديمة الحالة (serverless).
+
+---
+
+## 3) بنية المشروع (أهم الملفات)
+
+```
+spruvex-site/
+├── src/
+│   ├── app/
+│   │   ├── page.tsx                    الرئيسية (Hero, Features, TrustBar, Pricing teaser, NationalDayBanner)
+│   │   ├── pricing/page.tsx             صفحة الأسعار الكاملة
+│   │   ├── contact/page.tsx             صفحة "ابدأ تجربة مجانية" (فورم أولًا، صندوق تواصل أسفلها)
+│   │   ├── pay/[plan]/page.tsx          صفحة إتمام الدفع بالتحويل البنكي
+│   │   ├── admin/                       لوحة الإدارة (محمية بكلمة مرور + جلسة JWT)
+│   │   ├── layout.tsx                   Header + Footer + WhatsAppButton العائم
+│   │   └── api/
+│   │       ├── trial-signup/route.ts            POST — التسجيل الفعلي (يستدعي spruvex-r)
+│   │       ├── trial-signup/verify/route.ts     POST — وسيط للتحقق من رمز OTP
+│   │       ├── trial-signup/resend-otp/route.ts POST — وسيط لإعادة إرسال الرمز
+│   │       ├── payment-submission/route.ts      POST — إرسال بيانات تحويل بنكي
+│   │       └── admin/...                        تسجيل دخول/خروج الإدارة، عرض/مراجعة الطلبات
+│   ├── components/
+│   │   ├── forms/TrialForm.tsx          فورم التجربة المجانية (Client Component، آلة حالات)
+│   │   ├── forms/BankTransferForm.tsx   فورم الدفع بالتحويل (يشمل كود خصم)
+│   │   ├── layout/WhatsAppButton.tsx    زر واتساب عائم ثابت
+│   │   └── ...
+│   └── lib/
+│       ├── constants.ts                 PLANS, BUSINESS_TYPES, NATIONAL_DAY_PROMO, BRAND, ...
+│       ├── validation.ts                كل Zod schemas (هاتف سعودي، بريد، كلمة مرور، ...)
+│       ├── db.ts                        اتصال SQLite + إنشاء الجداول (lazy، انظر §5)
+│       ├── spruvexR.ts                  ⚠️ العميل الوحيد الذي يستدعي spruvex-r (server-only)
+│       ├── email.ts                     عميل Resend (server-only)
+│       ├── csrf.ts / rateLimit.ts       حماية CSRF (double-submit cookie) + rate limiting بالذاكرة
+│       ├── session.ts                   جلسة إدارة (JWT بكوكي httpOnly)
+│       └── repositories/
+│           ├── trialSignups.ts          CRUD جدول trial_signups
+│           └── paymentSubmissions.ts    CRUD جدول payment_submissions + uploaded_files
+├── render.yaml                          (بجذر المستودع، وليس هنا) — Render Blueprint
+├── .env.example                         كل متغيرات البيئة موثّقة هنا
+└── README.md                            توثيق تشغيلي أقصر (هذا الملف أشمل)
+```
+
+---
+
+## 4) الربط مع spruvex-r — التفصيل الكامل
+
+### 4.1 المبدأ المعماري
+
+كل استدعاء لـ spruvex-r يمر **حصرًا** عبر `src/lib/spruvexR.ts` — ملف
+server-only لا يُستورد أبدًا من أي مكوّن `"use client"`. لا صفحة ولا مكوّن
+عميل يعرف عنوان spruvex-r أو مفتاحه؛ المتصفح يتحدث فقط مع Route Handlers هذا
+الموقع (`/api/trial-signup*`)، وهي التي تتحدث مع spruvex-r من جانب السيرفر.
+
+**لا منطق موازٍ**: كل ما يحدث بجانب spruvex-r (إنشاء Tenant، OTP، كلمة المرور)
+يعيد استخدام نفس الآليات الحقيقية التي يستخدمها أي مستخدم يسجّل ذاتيًا هناك —
+لا نسخة "مبسّطة" منفصلة.
+
+### 4.2 نقاط النهاية المستخدمة (كلها تحت `{SPRUVEX_R_API_URL}/api/v1`)
+
+| المسار | من يستدعيه هنا | يحتاج مفتاح API | الوصف |
+|---|---|---|---|
+| `POST /public/trial-signup` | `createSpruvexRTrial()` | نعم — ترويسة `x-spruvex-site-key` | ينشئ Tenant تجريبي حقيقي (14 يوم) |
+| `POST /auth/register/verify` | `verifySpruvexRTrialOtp()` | لا (مسار عام أصلًا) | يتحقق من رمز OTP المكوّن من 6 أرقام |
+| `POST /auth/register/resend-otp` | `resendSpruvexRTrialOtp()` | لا | يعيد إرسال رمز جديد (يرجع 200 دائمًا) |
+| `POST /auth/login` | *(غير مُستدعى من هذا الموقع بعد)* | لا | تسجيل دخول لاحق بالبريد+كلمة المرور — يُستخدم مباشرة من لوحة spruvex-r نفسها |
+
+### 4.3 تدفّق التسجيل الكامل (خطوة بخطوة)
+
+1. المستخدم يعبّئ `/contact`: اسم النشاط، نوع النشاط، جوال، بريد، **كلمة مرور
+   يختارها بنفسه** + تأكيدها.
+2. `POST /api/trial-signup` (هذا الموقع):
+   - يتحقق من Zod schema (`trialSignupSchema`) + CSRF + rate limit (5/10 دقائق لكل IP).
+   - **فحص تكرار محلي**: لو البريد له سجل `provisioned` سابق محليًا → يرجع
+     `{alreadyRegistered: true}` فورًا بدون استدعاء spruvex-r.
+   - يُنشئ سجلًا محليًا بجدول `trial_signups` (بدون كلمة المرور أبدًا — لا تُخزَّن هنا).
+   - يستدعي `createSpruvexRTrial({restaurantName, phone, email, password, businessType})`
+     — مع إعادة محاولة تلقائية (حتى محاولتين إضافيتين) لفشل الشبكة/5xx العابر
+     فقط (وليس 401/409).
+   - **نجاح (201)** → يُعلَّم السجل `provisioned` (مع `tenant_id`/`dashboard_url`)،
+     يرسل بريد تنبيه للإدارة، ويرجع للمتصفح `{provisioned: true, email, dashboardUrl}`.
+   - **409 (جوال/بريد مكرر)** → يُعلَّم `duplicate`، يرجع `{alreadyRegistered: true}`.
+   - **فشل حقيقي آخر (401 تهيئة/5xx بعد استنفاد المحاولات)** → يُعلَّم
+     `manual_review`، **يُسجَّل بوضوح بـ`console.error`**، يرجع
+     `{provisioned: false}` (المستخدم يرى شاشة "تم استلام طلبك" — شبكة أمان،
+     وليست الحالة الطبيعية المتوقعة).
+3. عند `provisioned: true`، الواجهة تنتقل لخطوة إدخال رمز OTP (6 أرقام).
+4. `POST /api/trial-signup/verify` → يستدعي `/auth/register/verify` بجانب
+   spruvex-r. عند النجاح يرسل بريد ترحيب (يحمل `dashboardUrl`)، ثم المتصفح
+   يُحوَّل مباشرة عبر `window.location.href = dashboardUrl`.
+5. `dashboardUrl` يأتي من spruvex-r نفسه (`dashboardUrl()` helper هناك) —
+   حاليًا رابط عام للوحة التحكم، وليس رابطًا يحمل جلسة/token جاهزة.
+   ⚠️ **معروف/ناقص**: لا صفحة "دخول تلقائي بجلسة جاهزة" — المستخدم يصل للوحة
+   ويحتاج تسجيل الدخول يدويًا (بالبريد + **كلمة المرور التي اختارها بالفورم**).
+
+### 4.4 كلمة المرور — تفصيل مهم
+
+- سابقًا: كانت تُولَّد كلمة مرور عشوائية مجهولة (`crypto.randomBytes`) لا يعرفها
+  أحد — كانت مشكلة تصميم فعلية (لا طريقة عادية لتسجيل الدخول لاحقًا).
+- الآن: المستخدم يختار كلمة مروره في `/contact` (8+ أحرف، حرف + رقم على
+  الأقل — **نفس** `PASSWORD_RULE` المستخدمة تمامًا في `RegisterDto` بجانب
+  spruvex-r، معرّفة مرتين حرفيًا بنفس القيمة في كلا المشروعين، وليست منطقًا
+  موازيًا مختلفًا).
+- تصل لـ spruvex-r ضمن body الطلب لـ`/public/trial-signup`، وتُجزّأ
+  (`hashPassword`) وتُستخدم مباشرة بدل التوليد العشوائي.
+- **لا تُخزَّن ولا تُسجَّل بهذا المستودع (spruvex-site) أبدًا**، حتى مؤقتًا —
+  لا بقاعدة SQLite المحلية ولا بأي `console.log`.
+
+### 4.5 نوع النشاط (`businessType`)
+
+- قائمة القيم: `restaurant | cafe | food_truck | dessert_cafe | other`
+  (معرّفة في `BUSINESS_TYPES` بـ `constants.ts`، وبـ`PublicTrialSignupDto`
+  بجانب spruvex-r بنفس القيم).
+- يُخزَّن محليًا بعمود `trial_signups.business_type` **وأيضًا** يُمرَّر لـ
+  spruvex-r ليُخزَّن بعمود `Tenant.type` هناك (عبر `provisionTenant()` الذي
+  يقبله أصلًا) — تحقّقت فعليًا أن القيمة تصل وتُخزَّن بجدول `tenants`.
+
+### 4.6 متغيرات البيئة — من جانب أي مشروع
+
+| المتغير | بجانب spruvex-site | بجانب spruvex-r | ملاحظة |
+|---|---|---|---|
+| `SPRUVEX_R_API_URL` | ✅ (عنوان spruvex-r) | — | بدون `/api/v1` بالنهاية |
+| `SPRUVEX_SITE_API_KEY` | ✅ | ✅ | **يجب أن تتطابق القيمتان حرفيًا** — لا مزامنة تلقائية. عدم التطابق = 401 صامت = كل تسجيل يسقط لـ"مراجعة يدوية" (هذا كان السبب الجذري لعطل حقيقي واجهناه — راجع §7) |
+| `RESEND_API_KEY` | ✅ (بريد ترحيب/تنبيه إدارة) | ✅ (بريد OTP الحقيقي — منفصل تمامًا) | **يجب ضبطه على المشروعين كليهما بشكل مستقل** لتفعيل كل البريد |
+| `RESEND_FROM_EMAIL` | ✅ | — | يجب أن يكون نطاقًا مُتحقَّقًا منه فعليًا بحساب Resend |
+| `ADMIN_ALERT_EMAIL` | ✅ | — | وجهة تنبيه "تسجيل جديد" |
+| `ADMIN_PASSWORD` / `ADMIN_SESSION_SECRET` | ✅ | — | خاصة بلوحة `/admin` بهذا الموقع فقط |
+| `DATA_DIR` | ✅ (اختياري) | — | مسار SQLite (§5) |
+
+راجع `.env.example` بهذا المستودع للنسخة الكاملة مع التعليقات، و`render.yaml`
+(بجذر المستودع) لقائمة متغيرات Render اليدوية (`sync: false`).
+
+---
+
+## 5) قاعدة البيانات
+
+### 5.1 هذا الموقع (spruvex-site) — SQLite محلي
+
+⚠️ **ملف SQLite محلي على القرص، وليس Postgres.** يعمل فقط على استضافة Node.js
+دائمة (Render Web Service + Persistent Disk، أو VPS/Docker) — **لا يعمل على
+Vercel أو أي Serverless عديم الحالة**. هذا كان قرار النشر الأساسي وراء اختيار
+Render بدل Vercel.
+
+- **الموقع**: `{DATA_DIR}/spruvex-site.db` — `DATA_DIR` افتراضيًا `data/`
+  بجذر المشروع محليًا، ويجب ضبطه على Render ليطابق `mountPath` الخاص بالقرص
+  الدائم (`/var/data` في `render.yaml` الحالي) **بالضبط**.
+- **الاتصال**: `src/lib/db.ts` — اتصال singleton (`getDb()`)، يُنشأ ويُهيَّأ
+  فقط عند أول استدعاء فعلي من داخل route handler (ليس عند استيراد الملف —
+  انظر التعليق بأعلى `db.ts` عن لماذا هذا مهم لبناء Next.js).
+- **الجداول**:
+  - `trial_signups(id, restaurant_name, phone, email, status, tenant_id,
+    dashboard_url, business_type, created_at)` — `status` ∈
+    `new | provisioned | manual_review | duplicate`.
+  - `uploaded_files(id, original_name, mime_type, size_bytes, stored_filename, created_at)`
+    — إيصالات التحويل البنكي، خارج `public/`.
+  - `payment_submissions(id, restaurant_name, phone, plan_id, billing_cycle,
+    amount_halalas, payment_method, transfer_reference, provider_ref,
+    receipt_file_id, discount_code, status, admin_notes, created_at,
+    reviewed_at, reviewed_by)` — `status` ∈ `pending | approved | rejected`.
+    `amount_halalas` محسوب دائمًا من جانب السيرفر (`priceForCycle` +
+    `applyPromoDiscount`)، **لا يُعتمَد على أي مبلغ من المتصفح أبدًا**.
+- **جاهزية استبدال مستقبلي بـ Postgres**: هذه الطبقة مصممة عمدًا كـ repository
+  functions (`src/lib/repositories/*.ts`) — استبدال `db.ts` باتصال Postgres
+  (مثلًا Prisma) لا يتطلب تغيير أي صفحة أو route handler يستدعيها.
+
+### 5.2 spruvex-r — Postgres (مستودع منفصل، خارج نطاق هذا المشروع)
+
+- منتج SpruVex R الفعلي (NestJS + Prisma) يستخدم **PostgreSQL حقيقيًا**،
+  مستودع Git منفصل تمامًا (`spruvex-r`)، **لا صلة له بملف SQLite أعلاه**.
+- هذا الموقع لا يتصل بقاعدة بيانات spruvex-r أبدًا مباشرة — فقط عبر HTTP API
+  كما بالقسم 4.
+- الجداول ذات الصلة هناك (للعلم فقط، ليست جزءًا من هذا المستودع):
+  `User` (email/phone/passwordHash)، `Tenant` (`type` = نوع النشاط)،
+  `Subscription`، `OtpCode`، وغيرها. تفاصيلها الكاملة في مستودع `spruvex-r`
+  نفسه (`apps/api/prisma/schema.prisma`).
+
+---
+
+## 6) البريد الإلكتروني (Resend)
+
+ثلاث رسائل، من نظامين مختلفين تمامًا — **هذا فرق مهم يسبّب التباسًا بسهولة**:
+
+1. **بريد "رمز التحقق" (OTP)** — **لا يُرسل من هذا المستودع إطلاقًا**. يُرسله
+   spruvex-r نفسه عبر `ResendOtpSender` (موجود جاهزًا هناك بالفعل)، ويُفعَّل
+   تلقائيًا **فقط** عندما تكون `RESEND_API_KEY` مضبوطة على **خدمة spruvex-r
+   نفسها** (`identity.module.ts`: `useClass: process.env.RESEND_API_KEY ?
+   ResendOtpSender : DevOtpSender`). بدونها، الرمز يُطبع فقط بسجلات
+   spruvex-r (`[dev] OTP for ... : 123456`) ولن يصل أي مستخدم حقيقي أبدًا.
+2. **بريد الترحيب** (بعد تحقق OTP ناجح، يحمل `dashboardUrl`) — يُرسل من هذا
+   الموقع (`src/lib/email.ts` → `sendWelcomeEmail()`)، من
+   `src/app/api/trial-signup/verify/route.ts`.
+3. **بريد تنبيه الإدارة** (عند أي محاولة تسجيل، أي نتيجة) — من هذا الموقع
+   أيضًا (`sendAdminSignupAlertEmail()`)، من `src/app/api/trial-signup/route.ts`.
+
+كل دوال `email.ts` **best-effort**: فشل الإرسال (مفتاح غير صالح، نطاق `from`
+غير مُتحقَّق منه، خطأ شبكة) يُسجَّل بوضوح بـ`console.error` **ولا يُفشل أبدًا**
+تجربة المستخدم أو تدفّق التسجيل/التحقق.
+
+---
+
+## 7) المشاكل غير المحلولة / تحتاج فعلًا بشريًا — اقرأ هذا قبل أي شيء آخر
+
+### 7.1 🔴 حرج — لم يُتحقَّق منه على الإنتاج الفعلي
+
+**العرض**: التسجيل على النشر الفعلي (Render) لا يزال (آخر ما وصلنا له) يعرض
+رسالة "تم استلام طلبك، سيتفعل خلال ساعات" بدل الانتقال لخطوة OTP، ولا يصل أي بريد.
+
+**السبب الجذري المُشخَّص محليًا (مُعاد إنتاجه بخادمين حقيقيين، وليس تخمينًا)**:
+عدم تطابق `SPRUVEX_SITE_API_KEY` بين خدمتَي spruvex-site وspruvex-r على
+Render → spruvex-r يرجع 401 → كل تسجيل يسقط لمسار "مراجعة يدوية" الصامت،
+**قبل** حتى الوصول لخطوة إرسال أي بريد. لهذا ضبط Resend وحده لا يكفي أبدًا
+طالما هذا الحاجز الأول قائم.
+
+**لم يُتحقَّق بعد لأن**: بيئة العمل (sandbox) هذه لا تملك وصولًا لشبكة
+render.com ولا للوحة Render أو سجلاتها — لا يمكن تأكيد القيم الفعلية المضبوطة
+هناك من هنا.
+
+**المطلوب فعليًا** (خطوات تحقّق يدوية على لوحة Render):
+1. تأكد أن آخر Commit المدفوع على فرع `claude/spruvex-marketing-site-bo7xy7`
+   هو فعليًا ما يعمل حاليًا على خدمة spruvex-site بـRender (Render أحيانًا لا
+   يُعيد النشر تلقائيًا — قد يحتاج Manual Deploy).
+2. افتح إعدادات Environment لخدمة **spruvex-site**، انسخ قيمة
+   `SPRUVEX_SITE_API_KEY` الفعلية.
+3. افتح إعدادات Environment لخدمة **spruvex-r**، قارن قيمة
+   `SPRUVEX_SITE_API_KEY** هناك — يجب أن تكون **مطابقة حرفيًا** (لا مسافات
+   زائدة، لا فرق أحرف).
+4. تأكد أن `SPRUVEX_R_API_URL` بخدمة spruvex-site يشير فعليًا لعنوان خدمة
+   spruvex-r الحقيقي (ليس `localhost` أو placeholder).
+5. راقب سجلات (Logs) خدمة spruvex-site لحظة تسجيل تجريبي حقيقي — ابحث عن
+   سطر `[trial-signup] spruvex-r provisioning failed ... reason=...` — يحدد
+   السبب الدقيق (`invalid_config`=مفتاح خاطئ، `network`=تعذّر الوصول،
+   `server_error`=خطأ 5xx بجانب spruvex-r).
+
+### 7.2 🟡 كود جاهز ومُختبر محليًا، لكن غير مدفوع بعد لمستودع spruvex-r
+
+دعم كلمة المرور الحقيقية (§4.4) ونوع النشاط (§4.5) يتطلب تعديلًا **مرافقًا**
+بمستودع `spruvex-r` (وليس هذا المستودع فقط):
+- `apps/api/src/modules/site-integration/dto/site-public.dto.ts` — أضاف
+  حقلي `password` (مطلوب) و`businessType` (اختياري).
+- `apps/api/src/modules/site-integration/site-public.service.ts` — يستخدم
+  `input.password` بدل توليد عشوائي، ويمرّر `input.businessType` كـ
+  `type` لـ`provisionTenant()`.
+- `apps/api/test/integration/site-trial-signup.e2e.spec.ts` — تحديث مع
+  اختبار جديد يثبت تسجيل الدخول لاحقًا بنفس كلمة المرور المُختارة.
+
+هذا التعديل **موجود ومُختبر محليًا بنجاح** (240/240 اختبار ناجح شامل
+الاختبار الجديد) لكن **لم يُدفع** لمستودع spruvex-r بعد — كان خارج نطاق
+الفرع/المستودع المخصص للجلسة التي كتبت هذا الملف، وكان بانتظار إذن صريح من
+مالك المشروع. **بدون دفع هذا التعديل، حقل كلمة المرور بالفورم لن يعمل فعليًا
+بجانب spruvex-r** (سيُرفض الطلب لأن الحقل غير معروف بـDTO الحالي هناك، أو
+سيُتجاهَل حسب إعدادات `whitelist`).
+
+### 7.3 🟡 لم يُختبر: تسليم بريد Resend فعلي (استلام حقيقي في صندوق وارد)
+
+كل اختبارات Resend حتى الآن استُخدم فيها مفتاح placeholder غير صالح (للتأكد
+أن فشل الإرسال يُعامَل بلطف دون كسر أي تدفق) — **لم يُؤكَّد استلام حقيقي** لأي
+من الرسائل الثلاث (§6) بمفتاح Resend حقيقي. يحتاج:
+- `RESEND_API_KEY` حقيقي على كلا المشروعين (مستقل كل منهما، §4.6).
+- `RESEND_FROM_EMAIL` على نطاق مُتحقَّق منه فعليًا بحساب Resend (وإلا رفض صامت).
+
+### 7.4 🟢 معروف منذ فترة، غير حرج
+
+لا صفحة "دخول تلقائي بجلسة جاهزة" بلوحة spruvex-r بعد التحقق من OTP —
+`dashboardUrl` رابط عام، والمستخدم يحتاج تسجيل دخول يدوي (بالبريد وكلمة
+المرور التي اختارها). تحسين لوحة spruvex-r لدعم استهلاك token/جلسة جاهزة
+مباشرة بعد التحقق خطوة تالية جيدة، خارج نطاق هذا المستودع.
+
+---
+
+## 8) الأمان — نقاط مهمة يجب الحفاظ عليها
+
+- CSRF: نمط double-submit عبر كوكي httpOnly (`proxy.ts` يولّده، الصفحات
+  تحقنه بحقل مخفي، السيرفر يقارن بـ`crypto.timingSafeEqual`).
+- Rate limiting بالذاكرة لكل مسار حساس (تسجيل/تحقق/إعادة إرسال/دفع) — قيد
+  معروف: محدود بعملية واحدة (لا يعمل عبر عدة instances)، مقبول لأن SQLite
+  نفسه يفرض instance واحدة أصلًا (§5.1).
+- `SPRUVEX_R_API_URL` / `SPRUVEX_SITE_API_KEY` / `RESEND_API_KEY` وكل سرّ آخر:
+  تُقرأ فقط داخل دوال (lazy)، **ليس بمستوى الوحدة (module scope)** — تفاديًا
+  لأي فشل بناء إن غاب المتغير وقت "Collecting page data"، وتفاديًا لتسريبها
+  للحزمة العميلة.
+- كلمة المرور: لا تُخزَّن ولا تُسجَّل أبدًا بهذا المستودع (§4.4).
+- ملفات الإيصالات: أسماء ملفات عشوائية (UUID)، خارج `public/`، تُخدَّم فقط
+  لمستخدم إدارة موثّق عبر `/api/admin/receipt/[id]`.
+- مبلغ الدفع (`amount_halalas`) محسوب دائمًا من جانب السيرفر — لا يُعتمَد على
+  أي رقم يرسله المتصفح، حتى مع كود الخصم.
+
+---
+
+## 9) النشر (Render)
+
+راجع `render.yaml` (بجذر المستودع، خارج `spruvex-site/`) و`.env.example` و
+README.md لتفاصيل تشغيلية كاملة. ملخص سريع:
+- خدمة Node واحدة، `rootDir: spruvex-site`، `plan: starter` (Persistent Disk
+  يتطلب خطة مدفوعة).
+- Persistent Disk مُركَّب على `/var/data` — يجب أن يطابق `DATA_DIR` بالضبط.
+- **⚠️ غير مُتحقَّق منه فعليًا بحساب Render حقيقي** — هذه البيئة لا تملك وصولًا
+  لشبكة render.com. راجع لوحة Render فعليًا للتأكد من كل تفصيل.
+
+---
+
+## 10) آخر التعديلات (بترتيب زمني تقريبي)
+
+1. بناء الموقع كاملًا من الصفر (صفحات، تصميم، أمان).
+2. ربط `/api/trial-signup` بـ spruvex-r فعليًا (OTP، fallback عند الفشل).
+3. إعداد `render.yaml` + إصلاح فشلي نشر حقيقيين (dependencies، ثم module-load I/O).
+4. إصلاح مضاعفة بادئة `+966` بتطبيع رقم الجوال.
+5. **هذه الجولة**: تشخيص سبب سقوط التفعيل التلقائي (§7.1) + تكامل Resend
+   (§6) + فحص تكرار محلي + إعادة محاولة تلقائية للأخطاء العابرة + كلمة مرور
+   حقيقية بالتسجيل (§4.4، يحتاج §7.2) + نوع نشاط (§4.5) + إعادة هيكلة تصميم
+   (أيقونات، عنوان متحرك، زر واتساب، أسعار 45/70/109 + كود خصم اليوم الوطني
+   الوظيفي فعليًا).
+
+---
+
+## 11) كيف تختبر محليًا (تدفّق كامل حقيقي)
+
+يحتاج تشغيل **مشروعين** معًا (لا يمكن اختبار التسجيل حقيقيًا بهذا المستودع
+وحده):
+
+```bash
+# 1) spruvex-r (postgres + redis يجب أن يعملا أولًا)
+cd spruvex-r/apps/api && npm run dev   # يستمع افتراضيًا على PORT من .env (عادة 3000)
+
+# 2) spruvex-site
+cd spruvex-site && npm run dev         # Next.js، يختار منفذًا بديلًا لو 3000 محجوز
+
+# .env.local لهذا الموقع يجب أن يطابق:
+#   SPRUVEX_R_API_URL=http://<عنوان spruvex-r المحلي>
+#   SPRUVEX_SITE_API_KEY=<نفس القيمة المضبوطة بـ apps/api/.env بجانب spruvex-r>
+```
+
+رمز OTP بالتطوير المحلي (`NODE_ENV=development` بجانب spruvex-r) يظهر مباشرة
+بسجلات spruvex-r: `[dev] OTP for <email> (email_verification): 123456`.
