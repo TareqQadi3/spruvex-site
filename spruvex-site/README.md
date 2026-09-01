@@ -7,8 +7,16 @@ TypeScript + Tailwind CSS، بدون CMS خارجي، المحتوى والأس�
 
 - **Next.js 16 (App Router)** + TypeScript + Tailwind CSS v4
 - **framer-motion** للحركة والتفاعلات الدقيقة، **lucide-react** للأيقونات
-- **better-sqlite3** كقاعدة بيانات محلية بسيطة لهذه المرحلة (انظر تحذير النشر أدناه)
+- **better-sqlite3** كقاعدة بيانات محلية بسيطة لهذه المرحلة (انظر تحذير النشر أدناه) —
+  يتطلب **Node ≥ 22** تحديدًا (`engines.node` بـ`package.json`)
 - **zod** للتحقق من المدخلات، **jose** لجلسة الإدارة (JWT موقّع)
+
+⚠️ **كل حزم `devDependencies` منقولة إلى `dependencies` عمدًا** (TypeScript، ESLint،
+Tailwind، كل `@types/*`) — `next build` يشغّل type-checking + ESLint + PostCSS
+فعليًا، فهي حزم بناء حقيقية لا تطوير فقط. منصات نشر كثيرة (منها Render) تضبط
+`NODE_ENV=production` أثناء `npm install` أيضًا، وnpm يتجاهل `devDependencies`
+تلقائيًا في هذه الحالة — لو بقيت هذي الحزم بـ`devDependencies` فسيفشل البناء هناك
+بخطأ "module not found" لكل حزمة منها بالتتابع. **لا تُعِد أيًا منها لـ`devDependencies`.**
 
 ## التشغيل محليًا
 
