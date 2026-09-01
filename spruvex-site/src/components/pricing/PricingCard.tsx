@@ -6,6 +6,7 @@ import { ButtonLink } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
 import {
   FEATURE_ROWS,
+  PERMANENT_DISCOUNT_PERCENT,
   priceForCycle,
   yearlySavings,
   type BillingCycle,
@@ -25,6 +26,7 @@ export function PricingCard({
   const cycleMonths = cycle === "monthly" ? 1 : cycle === "semiannual" ? 6 : 12;
   const monthlyEquivalent = Math.round(price / cycleMonths);
   const savings = cycle === "yearly" ? yearlySavings(plan) : 0;
+  const listPrice = plan.prices.listMonthly * cycleMonths;
 
   const featuresToShow = compact ? FEATURE_ROWS.slice(0, 4) : FEATURE_ROWS;
 
@@ -55,6 +57,20 @@ export function PricingCard({
       </div>
 
       <div>
+        <div className="flex items-center gap-2">
+          <span
+            dir="ltr"
+            className={cn(
+              "text-sm font-bold line-through decoration-2",
+              plan.highlighted ? "text-white/35 decoration-white/35" : "text-[var(--color-muted)] decoration-red-400/70"
+            )}
+          >
+            {listPrice.toLocaleString("ar-SA-u-nu-latn")} ريال
+          </span>
+          <span className="rounded-full bg-red-500/15 px-2 py-0.5 text-[11px] font-bold text-red-500">
+            خصم {PERMANENT_DISCOUNT_PERCENT}%
+          </span>
+        </div>
         <div className="flex items-baseline gap-1.5">
           <span className={cn("text-4xl font-extrabold", plan.highlighted ? "text-white" : "text-[var(--color-navy-900)]")}>
             {price.toLocaleString("ar-SA-u-nu-latn")}

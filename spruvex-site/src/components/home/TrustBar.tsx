@@ -2,7 +2,16 @@ import { Container } from "@/components/ui/Container";
 import { Marquee } from "@/components/ui/Marquee";
 import { Reveal } from "@/components/ui/Reveal";
 import { TRUST_BAR_ITEMS } from "@/lib/constants";
-import { Bike, CreditCard } from "lucide-react";
+import { Bike, Truck, Rocket, PackageCheck, CreditCard, Wallet, type LucideIcon } from "lucide-react";
+
+const ICON_BY_NAME: Record<string, LucideIcon> = {
+  هنقرستيشن: Bike,
+  جاهز: Truck,
+  كيتا: Rocket,
+  جيديا: PackageCheck,
+  مدى: CreditCard,
+  هلا: Wallet,
+};
 
 export function TrustBar() {
   return (
@@ -19,15 +28,18 @@ export function TrustBar() {
       </Container>
 
       <Marquee
-        items={TRUST_BAR_ITEMS.map((item, i) => (
-          <div
-            key={i}
-            className="flex items-center gap-2.5 rounded-2xl border border-black/5 bg-[var(--color-bg)] px-5 py-3 text-[var(--color-navy-900)]/70"
-          >
-            {item.category === "توصيل" ? <Bike size={18} /> : <CreditCard size={18} />}
-            <span className="text-sm font-bold">{item.name}</span>
-          </div>
-        ))}
+        items={TRUST_BAR_ITEMS.map((item, i) => {
+          const Icon = ICON_BY_NAME[item.name] ?? (item.category === "توصيل" ? Bike : CreditCard);
+          return (
+            <div
+              key={i}
+              className="flex items-center gap-2.5 rounded-2xl border border-black/5 bg-[var(--color-bg)] px-5 py-3 text-[var(--color-navy-900)]/70"
+            >
+              <Icon size={18} />
+              <span className="text-sm font-bold">{item.name}</span>
+            </div>
+          );
+        })}
       />
     </section>
   );

@@ -37,12 +37,34 @@ export const emailSchema = z
   .max(190)
   .transform((val) => val.toLowerCase());
 
-export const trialSignupSchema = z.object({
-  restaurantName: restaurantNameSchema,
-  phone: saudiPhoneSchema,
-  email: emailSchema,
-  csrfToken: z.string().min(1),
-});
+// نفس سياسة كلمة المرور المستخدمة بالضبط بجانب spruvex-r (RegisterDto.password
+// وPublicTrialSignupDto.password: 8+ أحرف، حرف واحد ورقم واحد على الأقل) —
+// نفس الـregex حرفيًا، وليس منطقًا موازيًا مختلفًا قد يقبل هنا ما يُرفض هناك.
+const PASSWORD_RULE = /^(?=.*[A-Za-z])(?=.*\d).+$/;
+const PASSWORD_MESSAGE = "كلمة المرور يجب أن تكون 8 أحرف فأكثر، وتحتوي حرفًا ورقمًا على الأقل";
+
+export const passwordSchema = z
+  .string()
+  .min(8, PASSWORD_MESSAGE)
+  .max(128, "كلمة المرور طويلة جدًا")
+  .regex(PASSWORD_RULE, PASSWORD_MESSAGE);
+
+export const businessTypeSchema = z.enum(["restaurant", "cafe", "food_truck", "dessert_cafe", "other"]);
+
+export const trialSignupSchema = z
+  .object({
+    restaurantName: restaurantNameSchema,
+    businessType: businessTypeSchema,
+    phone: saudiPhoneSchema,
+    email: emailSchema,
+    password: passwordSchema,
+    confirmPassword: z.string().min(1, "تأكيد كلمة المرور مطلوب"),
+    csrfToken: z.string().min(1),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "كلمتا المرور غير متطابقتين",
+    path: ["confirmPassword"],
+  });
 export type TrialSignupInput = z.infer<typeof trialSignupSchema>;
 
 export const trialOtpVerifySchema = z.object({
@@ -74,6 +96,7 @@ export const paymentSubmissionSchema = z.object({
     .max(120, "مرجع التحويل طويل جدًا")
     .optional()
     .or(z.literal("")),
+  discountCode: z.string().trim().max(40).optional().or(z.literal("")),
   csrfToken: z.string().min(1),
 });
 export type PaymentSubmissionInput = z.infer<typeof paymentSubmissionSchema>;

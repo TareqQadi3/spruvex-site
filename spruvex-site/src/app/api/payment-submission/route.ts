@@ -32,6 +32,7 @@ export async function POST(req: NextRequest) {
     planId: formData.get("planId")?.toString() ?? "",
     billingCycle: formData.get("billingCycle")?.toString() ?? "",
     transferReference: formData.get("transferReference")?.toString() ?? "",
+    discountCode: formData.get("discountCode")?.toString() ?? "",
     csrfToken: formData.get("csrfToken")?.toString() ?? "",
   };
 
@@ -97,6 +98,7 @@ export async function POST(req: NextRequest) {
     billingCycle: parsed.data.billingCycle,
     transferReference: parsed.data.transferReference || null,
     receiptFileId,
+    discountCode: parsed.data.discountCode || null,
   });
 
   return NextResponse.json({ ok: true });

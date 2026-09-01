@@ -77,6 +77,9 @@ export interface CreateSpruvexRTrialInput {
   restaurantName: string;
   phone: string;
   email: string;
+  /** كلمة المرور التي اختارها صاحب المطعم بالنموذج — تُمرَّر كما هي، لا تُخزَّن هنا أبدًا. */
+  password: string;
+  businessType?: string;
 }
 
 export type CreateSpruvexRTrialResult =

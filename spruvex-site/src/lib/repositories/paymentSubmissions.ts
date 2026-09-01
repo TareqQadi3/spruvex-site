@@ -1,5 +1,13 @@
 import { getDb } from "@/lib/db";
-import { getPlan, priceForCycle, type BillingCycle, type PlanId } from "@/lib/constants";
+import {
+  applyPromoDiscount,
+  getPlan,
+  isValidPromoCode,
+  normalizePromoCode,
+  priceForCycle,
+  type BillingCycle,
+  type PlanId,
+} from "@/lib/constants";
 import crypto from "node:crypto";
 
 export interface UploadedFileRow {
@@ -22,6 +30,7 @@ export interface PaymentSubmissionRow {
   transfer_reference: string | null;
   provider_ref: string | null;
   receipt_file_id: string | null;
+  discount_code: string | null;
   status: "pending" | "approved" | "rejected";
   admin_notes: string | null;
   created_at: string;
@@ -61,23 +70,37 @@ export function createPaymentSubmission(input: {
   billingCycle: BillingCycle;
   transferReference: string | null;
   receiptFileId: string | null;
+  /** كود خصم اليوم الوطني — يُتحقَّق ويُطبَّق هنا فقط (لا يُعتمَد على أي مبلغ من المتصفح). */
+  discountCode?: string | null;
 }): PaymentSubmissionRow {
   const db = getDb();
   const plan = getPlan(input.planId);
   if (!plan) throw new Error("خطة غير معروفة");
-  const amountHalalas = Math.round(priceForCycle(plan, input.billingCycle) * 100);
+  const baseAmountHalalas = Math.round(priceForCycle(plan, input.billingCycle) * 100);
+  const validDiscountCode = isValidPromoCode(input.discountCode) ? normalizePromoCode(input.discountCode) : null;
+  const amountHalalas = applyPromoDiscount(baseAmountHalalas, input.discountCode);
   const createdAt = new Date().toISOString();
 
   const result = db
     .prepare(
       `INSERT INTO payment_submissions
         (restaurant_name, phone, plan_id, billing_cycle, amount_halalas, payment_method,
-         transfer_reference, receipt_file_id, status, created_at)
+         transfer_reference, receipt_file_id, discount_code, status, created_at)
        VALUES
         (@restaurantName, @phone, @planId, @billingCycle, @amountHalalas, 'bank_transfer',
-         @transferReference, @receiptFileId, 'pending', @createdAt)`
+         @transferReference, @receiptFileId, @discountCode, 'pending', @createdAt)`
     )
-    .run({ ...input, amountHalalas, createdAt });
+    .run({
+      restaurantName: input.restaurantName,
+      phone: input.phone,
+      planId: input.planId,
+      billingCycle: input.billingCycle,
+      transferReference: input.transferReference,
+      receiptFileId: input.receiptFileId,
+      discountCode: validDiscountCode,
+      amountHalalas,
+      createdAt,
+    });
 
   return db
     .prepare("SELECT * FROM payment_submissions WHERE id = ?")

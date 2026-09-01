@@ -1,5 +1,5 @@
 import { getDb } from "@/lib/db";
-import type { TrialSignupInput } from "@/lib/validation";
+import type { BusinessType } from "@/lib/constants";
 
 export type TrialSignupStatus = "new" | "provisioned" | "manual_review" | "duplicate";
 
@@ -11,6 +11,7 @@ export interface TrialSignupRow {
   status: TrialSignupStatus;
   tenant_id: string | null;
   dashboard_url: string | null;
+  business_type: BusinessType | null;
   created_at: string;
 }
 
@@ -19,12 +20,21 @@ export interface TrialSignupRow {
  * دائمًا بغض النظر عن نجاح أو فشل الخطوة التالية). استدعاء spruvex-r الفعلي
  * لإنشاء Tenant يحدث بعد هذا في src/app/api/trial-signup/route.ts، والنتيجة
  * تُسجَّل عبر markTrialSignupProvisioned/markTrialSignupManualReview أدناه.
+ *
+ * ⚠️ لا كلمة مرور هنا عمدًا — كلمة المرور التي يختارها المستخدم تُرسَل مباشرة
+ * لـspruvex-r (المالك الوحيد لهويّة الحساب) ولا تُخزَّن أو تُسجَّل بهذا
+ * المستودع أبدًا، حتى مؤقتًا.
  */
-export function createTrialSignup(input: Omit<TrialSignupInput, "csrfToken">): TrialSignupRow {
+export function createTrialSignup(input: {
+  restaurantName: string;
+  phone: string;
+  email: string;
+  businessType: BusinessType;
+}): TrialSignupRow {
   const db = getDb();
   const stmt = db.prepare(
-    `INSERT INTO trial_signups (restaurant_name, phone, email, status, created_at)
-     VALUES (@restaurantName, @phone, @email, 'new', @createdAt)`
+    `INSERT INTO trial_signups (restaurant_name, phone, email, business_type, status, created_at)
+     VALUES (@restaurantName, @phone, @email, @businessType, 'new', @createdAt)`
   );
   const createdAt = new Date().toISOString();
   const result = stmt.run({ ...input, createdAt });

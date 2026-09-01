@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Minus } from "lucide-react";
+import { Check, Minus, BadgePercent } from "lucide-react";
 import { Container } from "@/components/ui/Container";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { Reveal, RevealGroup } from "@/components/ui/Reveal";
 import { BillingToggle } from "@/components/pricing/BillingToggle";
 import { PricingCard } from "@/components/pricing/PricingCard";
-import { ADDONS, FEATURE_ROWS, PLANS, type BillingCycle } from "@/lib/constants";
+import { ADDONS, FEATURE_ROWS, NATIONAL_DAY_PROMO, PLANS, type BillingCycle } from "@/lib/constants";
 
 export function PricingPageContent() {
   const [cycle, setCycle] = useState<BillingCycle>("monthly");
@@ -24,6 +24,16 @@ export function PricingPageContent() {
           />
           <Reveal>
             <BillingToggle value={cycle} onChange={setCycle} />
+          </Reveal>
+          <Reveal delay={0.08}>
+            <div className="flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm font-bold text-white ring-1 ring-white/15">
+              <BadgePercent size={16} className="text-[var(--color-accent-400)]" />
+              استخدم الكود{" "}
+              <span dir="ltr" className="text-[var(--color-accent-400)]">
+                {NATIONAL_DAY_PROMO.code}
+              </span>{" "}
+              عند الدفع لخصم إضافي {NATIONAL_DAY_PROMO.percentOff}%
+            </div>
           </Reveal>
         </Container>
       </section>

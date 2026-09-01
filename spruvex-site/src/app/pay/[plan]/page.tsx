@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { Landmark, Copy } from "lucide-react";
+import { Landmark, Copy, BadgePercent } from "lucide-react";
 import { Container } from "@/components/ui/Container";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { Reveal } from "@/components/ui/Reveal";
@@ -9,6 +9,7 @@ import { getCsrfTokenForForm } from "@/lib/csrf";
 import {
   BANK_TRANSFER_INFO,
   BILLING_CYCLES,
+  NATIONAL_DAY_PROMO,
   getPlan,
   priceForCycle,
   type BillingCycle,
@@ -83,10 +84,20 @@ export default async function PayPlanPage({
               بعد إتمام التحويل، عبّئ النموذج المجاور برقم عملية التحويل أو صورة الإيصال. سيراجع
               فريقنا الطلب ويُفعّل اشتراكك خلال ساعات عمل.
             </p>
+            <div className="mt-4 flex items-start gap-3 rounded-xl bg-[var(--color-accent-500)]/10 p-4 text-xs leading-relaxed text-[var(--color-accent-400)]">
+              <BadgePercent size={18} className="mt-0.5 shrink-0" />
+              <span dir="ltr" className="font-bold">
+                {NATIONAL_DAY_PROMO.code}
+              </span>
+              <span className="text-white/60">
+                — أدخله بالنموذج المجاور لخصم إضافي {NATIONAL_DAY_PROMO.percentOff}% بمناسبة اليوم
+                الوطني.
+              </span>
+            </div>
           </Reveal>
 
           <Reveal delay={0.1}>
-            <BankTransferForm csrfToken={csrfToken} planId={plan.id} billingCycle={cycle} />
+            <BankTransferForm csrfToken={csrfToken} planId={plan.id} billingCycle={cycle} baseAmount={amount} />
           </Reveal>
         </div>
       </Container>

@@ -61,6 +61,8 @@ function createConnection(): Database.Database {
       tenant_id TEXT,
       -- رابط لوحة تحكم هذا المستأجر بـ spruvex-r — NULL إن لم يُنشأ بعد.
       dashboard_url TEXT,
+      -- نوع النشاط (مطعم/كوفي/فود ترك/مقهى حلويات/أخرى) — للعرض والتصنيف محليًا فقط.
+      business_type TEXT,
       created_at TEXT NOT NULL
     );
 
@@ -84,6 +86,9 @@ function createConnection(): Database.Database {
       transfer_reference TEXT,
       provider_ref TEXT,
       receipt_file_id TEXT REFERENCES uploaded_files(id),
+      -- كود الخصم المُدخَل (إن وُجد وصحيحًا) — للعرض بلوحة الإدارة فقط؛
+      -- amount_halalas بالأعلى محسوب بالفعل بعد تطبيق الخصم من جانب السيرفر.
+      discount_code TEXT,
       status TEXT NOT NULL DEFAULT 'pending',
       admin_notes TEXT,
       created_at TEXT NOT NULL,
@@ -106,6 +111,16 @@ function createConnection(): Database.Database {
   }
   if (!existingColumns.has("dashboard_url")) {
     db.exec("ALTER TABLE trial_signups ADD COLUMN dashboard_url TEXT");
+  }
+  if (!existingColumns.has("business_type")) {
+    db.exec("ALTER TABLE trial_signups ADD COLUMN business_type TEXT");
+  }
+
+  const paymentSubmissionColumns = db
+    .prepare("PRAGMA table_info(payment_submissions)")
+    .all() as { name: string }[];
+  if (!paymentSubmissionColumns.some((c) => c.name === "discount_code")) {
+    db.exec("ALTER TABLE payment_submissions ADD COLUMN discount_code TEXT");
   }
 
   return db;

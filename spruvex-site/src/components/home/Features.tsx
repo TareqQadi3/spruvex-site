@@ -64,7 +64,28 @@ export function Features() {
       <Container className="flex flex-col gap-14">
         <SectionHeading
           eyebrow="كل ما يحتاجه مطعمك"
-          title="نظام واحد بدل خمسة أنظمة متفرقة"
+          title={
+            <>
+              نظام{" "}
+              <span className="relative inline-block">
+                <span className="relative z-10 bg-gradient-to-l from-[var(--color-accent-400)] to-[var(--color-accent-600)] bg-clip-text text-transparent">
+                  واحد
+                </span>
+                <motion.span
+                  initial={{ scaleX: 0 }}
+                  whileInView={{ scaleX: 1 }}
+                  viewport={{ once: true }}
+                  transition={{ duration: 0.7, delay: 0.4, ease: "easeOut" }}
+                  style={{ transformOrigin: "right" }}
+                  className="absolute inset-x-0 -bottom-1 -z-0 h-3 rounded-full bg-[var(--color-accent-500)]/25"
+                />
+              </span>{" "}
+              بدل{" "}
+              <span className="text-[var(--color-muted)] line-through decoration-red-400 decoration-2">
+                خمسة أنظمة متفرقة
+              </span>
+            </>
+          }
           description="من أول طلب حتى آخر تقرير، SpruVex R يغطي رحلة مطعمك كاملة بواجهة عربية أنيقة وسريعة."
         />
 

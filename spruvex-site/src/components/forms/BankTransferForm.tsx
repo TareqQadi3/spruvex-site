@@ -2,22 +2,31 @@
 
 import { useState, type FormEvent } from "react";
 import { motion } from "framer-motion";
-import { CheckCircle2, Loader2, Upload } from "lucide-react";
+import { BadgeCheck, CheckCircle2, Loader2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import type { BillingCycle, PlanId } from "@/lib/constants";
+import { applyPromoDiscount, isValidPromoCode, type BillingCycle, type PlanId } from "@/lib/constants";
 
 export function BankTransferForm({
   csrfToken,
   planId,
   billingCycle,
+  baseAmount,
 }: {
   csrfToken: string;
   planId: PlanId;
   billingCycle: BillingCycle;
+  /** المبلغ بالريال قبل أي خصم كود — لعرض تقديري فقط؛ السيرفر يعيد الحساب دائمًا. */
+  baseAmount: number;
 }) {
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
+  const [discountCode, setDiscountCode] = useState("");
+
+  const codeValid = isValidPromoCode(discountCode);
+  const discountedAmount = codeValid
+    ? applyPromoDiscount(Math.round(baseAmount * 100), discountCode) / 100
+    : baseAmount;
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -108,6 +117,28 @@ export function BankTransferForm({
           placeholder="مثال: TRX-102938"
           className="rounded-xl border border-black/10 bg-[var(--color-bg)] px-4 py-3 text-sm outline-none focus:border-[var(--color-accent-500)]"
         />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="discountCode" className="text-sm font-bold text-[var(--color-navy-900)]">
+          كود الخصم (اختياري)
+        </label>
+        <input
+          id="discountCode"
+          name="discountCode"
+          dir="ltr"
+          maxLength={40}
+          placeholder="WATANI20"
+          value={discountCode}
+          onChange={(e) => setDiscountCode(e.target.value)}
+          className="rounded-xl border border-black/10 bg-[var(--color-bg)] px-4 py-3 text-sm uppercase outline-none focus:border-[var(--color-accent-500)]"
+        />
+        {codeValid && (
+          <p className="flex items-center gap-1.5 text-xs font-bold text-emerald-600">
+            <BadgeCheck size={14} /> تم تطبيق الخصم — المبلغ بعد الخصم:{" "}
+            {discountedAmount.toLocaleString("ar-SA-u-nu-latn")} ريال
+          </p>
+        )}
       </div>
 
       <div className="flex flex-col gap-1.5">

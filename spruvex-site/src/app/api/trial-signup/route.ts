@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "جلسة غير صالحة، أعد تحميل الصفحة" }, { status: 403 });
   }
 
-  const { restaurantName, phone, email } = parsed.data;
+  const { restaurantName, businessType, phone, email, password } = parsed.data;
 
   async function notifyAdmin(status: "provisioned" | "manual_review" | "duplicate") {
     const result = await sendAdminSignupAlertEmail({ restaurantName, phone, email, status });
@@ -61,10 +61,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, provisioned: false, alreadyRegistered: true });
   }
 
-  // سجل احتياطي/متابعة مبيعات محلي — يبقى دائمًا بغض النظر عن نجاح الخطوة التالية.
-  const localRecord = createTrialSignup({ restaurantName, phone, email });
+  // سجل احتياطي/متابعة مبيعات محلي — يبقى دائمًا بغض النظر عن نجاح الخطوة
+  // التالية. لا كلمة مرور هنا عمدًا — createTrialSignup لا يقبلها أصلًا.
+  const localRecord = createTrialSignup({ restaurantName, phone, email, businessType });
 
-  const provisioning = await createSpruvexRTrial({ restaurantName, phone, email });
+  const provisioning = await createSpruvexRTrial({ restaurantName, phone, email, password, businessType });
 
   if (provisioning.ok) {
     markTrialSignupProvisioned(localRecord.id, {

@@ -26,6 +26,7 @@ export interface Plan {
   branches: string;
   highlighted?: boolean;
   prices: {
+    /** السعر الحالي — خصم دائم ~30% عن listMonthly أدناه. */
     monthly: number;
     /**
      * ⚠️ سعر الـ 6 أشهر لم يُحدَّد صراحة في بيانات المنتج — هذا رقم مبدئي
@@ -33,8 +34,10 @@ export interface Plan {
      * TODO(business): تأكيد السعر الرسمي لدورة الـ 6 أشهر لكل باقة.
      */
     semiannual: number;
-    /** عرض اليوم الوطني — السعر السنوي الرسمي كما ورد في بيانات المنتج. */
+    /** الشهري × 10 — أي شهرين مجانًا عند الدفع السنوي. */
     yearly: number;
+    /** السعر "الأصلي" قبل خصم الـ30% الدائم — يُعرض مشطوبًا بجانب monthly. */
+    listMonthly: number;
   };
 }
 
@@ -51,7 +54,7 @@ export const PLANS: Plan[] = [
     name: "الأساسية",
     description: "لبداية قوية لمطعم بفرع واحد",
     branches: "فرع واحد",
-    prices: { monthly: 249, semiannual: 1345, yearly: 2496 },
+    prices: { monthly: 45, semiannual: 243, yearly: 450, listMonthly: 65 },
   },
   {
     id: "pro",
@@ -59,14 +62,14 @@ export const PLANS: Plan[] = [
     description: "لإدارة أذكى مع نمو مطعمك",
     branches: "حتى 3 فروع",
     highlighted: true,
-    prices: { monthly: 449, semiannual: 2425, yearly: 4496 },
+    prices: { monthly: 70, semiannual: 378, yearly: 700, listMonthly: 100 },
   },
   {
     id: "advanced",
     name: "المتقدمة",
     description: "تحكم كامل للسلاسل متعددة الفروع",
     branches: "غير محدود",
-    prices: { monthly: 749, semiannual: 4045, yearly: 7496 },
+    prices: { monthly: 109, semiannual: 589, yearly: 1090, listMonthly: 155 },
   },
 ];
 
@@ -131,6 +134,44 @@ export function priceForCycle(plan: Plan, cycle: BillingCycle): number {
 export function yearlySavings(plan: Plan): number {
   return plan.prices.monthly * 12 - plan.prices.yearly;
 }
+
+/** نسبة الخصم الدائم المعروضة (السعر الحالي مقابل listMonthly) — ثابتة تسويقيًا عند 30%. */
+export const PERMANENT_DISCOUNT_PERCENT = 30;
+
+/**
+ * كود خصم إضافي 20% بمناسبة اليوم الوطني — يُطبَّق فوق السعر الحالي (وليس
+ * فوق listMonthly) عند إتمام الدفع بـ/pay/[plan]. التحقق والحساب يتمّان من
+ * جانب السيرفر فقط (src/lib/repositories/paymentSubmissions.ts) — لا يُعتمَد
+ * على أي مبلغ يرسله المتصفح.
+ */
+export const NATIONAL_DAY_PROMO = {
+  code: "WATANI20",
+  percentOff: 20,
+} as const;
+
+export function normalizePromoCode(input: string | null | undefined): string {
+  return (input ?? "").trim().toUpperCase();
+}
+
+export function isValidPromoCode(code: string | null | undefined): boolean {
+  return normalizePromoCode(code) === NATIONAL_DAY_PROMO.code;
+}
+
+/** يُطبَّق فقط لو الكود صحيحًا — وإلا يُرجع المبلغ كما هو دون أي تغيير. */
+export function applyPromoDiscount(amountHalalas: number, code: string | null | undefined): number {
+  if (!isValidPromoCode(code)) return amountHalalas;
+  return Math.round(amountHalalas * (1 - NATIONAL_DAY_PROMO.percentOff / 100));
+}
+
+export type BusinessType = "restaurant" | "cafe" | "food_truck" | "dessert_cafe" | "other";
+
+export const BUSINESS_TYPES: { id: BusinessType; label: string }[] = [
+  { id: "restaurant", label: "مطعم" },
+  { id: "cafe", label: "كوفي" },
+  { id: "food_truck", label: "فود ترك" },
+  { id: "dessert_cafe", label: "مقهى حلويات" },
+  { id: "other", label: "أخرى" },
+];
 
 /** تاريخ اليوم الوطني السعودي القادم (23 سبتمبر) لعرض العدّاد التنازلي. */
 export function nextNationalDay(from: Date = new Date()): Date {

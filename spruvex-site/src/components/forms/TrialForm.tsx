@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { motion } from "framer-motion";
-import { CheckCircle2, Loader2, ShieldCheck } from "lucide-react";
+import { CheckCircle2, Eye, EyeOff, Loader2, Lock, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { TRIAL_DAYS } from "@/lib/constants";
+import { BUSINESS_TYPES, TRIAL_DAYS, type BusinessType } from "@/lib/constants";
 
 type Phase =
   | "form"
@@ -16,6 +16,8 @@ type Phase =
   | "redirecting"
   | "error";
 
+const RESEND_COOLDOWN_SECONDS = 30;
+
 export function TrialForm({ csrfToken }: { csrfToken: string }) {
   const [phase, setPhase] = useState<Phase>("form");
   const [error, setError] = useState<string | null>(null);
@@ -23,7 +25,15 @@ export function TrialForm({ csrfToken }: { csrfToken: string }) {
   const [dashboardUrl, setDashboardUrl] = useState("");
   const [code, setCode] = useState("");
   const [otpError, setOtpError] = useState<string | null>(null);
-  const [resendState, setResendState] = useState<"idle" | "sending" | "sent">("idle");
+  const [resendSending, setResendSending] = useState(false);
+  const [cooldownLeft, setCooldownLeft] = useState(0);
+  const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    if (cooldownLeft <= 0) return;
+    const timer = setTimeout(() => setCooldownLeft((s) => s - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [cooldownLeft]);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -39,8 +49,11 @@ export function TrialForm({ csrfToken }: { csrfToken: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           restaurantName: form.get("restaurantName"),
+          businessType: form.get("businessType"),
           phone: form.get("phone"),
           email: submittedEmail,
+          password: form.get("password"),
+          confirmPassword: form.get("confirmPassword"),
           csrfToken,
         }),
       });
@@ -93,7 +106,7 @@ export function TrialForm({ csrfToken }: { csrfToken: string }) {
   }
 
   async function handleResend() {
-    setResendState("sending");
+    setResendSending(true);
     try {
       await fetch("/api/trial-signup/resend-otp", {
         method: "POST",
@@ -101,8 +114,8 @@ export function TrialForm({ csrfToken }: { csrfToken: string }) {
         body: JSON.stringify({ email, csrfToken }),
       });
     } finally {
-      setResendState("sent");
-      setTimeout(() => setResendState("idle"), 30_000);
+      setResendSending(false);
+      setCooldownLeft(RESEND_COOLDOWN_SECONDS);
     }
   }
 
@@ -115,11 +128,11 @@ export function TrialForm({ csrfToken }: { csrfToken: string }) {
       >
         <CheckCircle2 className="text-[var(--color-accent-500)]" size={52} />
         <h3 className="text-xl font-extrabold text-[var(--color-navy-900)]">
-          تم استلام طلبك بنجاح!
+          تم استلام طلبك
         </h3>
         <p className="max-w-sm text-sm leading-relaxed text-[var(--color-muted)]">
-          سيتم تفعيل حسابك خلال ساعات من فريقنا، وسنتواصل معك على رقم الجوال أو البريد المُدخل
-          لإرسال بيانات الدخول.
+          واجهنا عطلًا مؤقتًا أثناء إنشاء حسابك تلقائيًا. فريقنا اطّلع على طلبك وسيتواصل معك
+          لإكمال التفعيل.
         </p>
       </motion.div>
     );
@@ -194,13 +207,13 @@ export function TrialForm({ csrfToken }: { csrfToken: string }) {
           <button
             type="button"
             onClick={handleResend}
-            disabled={resendState !== "idle"}
+            disabled={resendSending || cooldownLeft > 0}
             className="text-center text-xs font-bold text-[var(--color-accent-600)] hover:underline disabled:cursor-not-allowed disabled:text-[var(--color-muted)] disabled:no-underline"
           >
-            {resendState === "sending"
+            {resendSending
               ? "جارِ الإرسال..."
-              : resendState === "sent"
-                ? "تم إرسال رمز جديد ✓"
+              : cooldownLeft > 0
+                ? `أعد الإرسال خلال 00:${String(cooldownLeft).padStart(2, "0")}`
                 : "لم يصلك الرمز؟ أعد الإرسال"}
           </button>
         </form>
@@ -212,7 +225,7 @@ export function TrialForm({ csrfToken }: { csrfToken: string }) {
     <form onSubmit={handleSubmit} className="flex flex-col gap-4 rounded-3xl border border-black/5 bg-white p-7 sm:p-8">
       <div className="flex flex-col gap-1.5">
         <label htmlFor="restaurantName" className="text-sm font-bold text-[var(--color-navy-900)]">
-          اسم المطعم
+          اسم النشاط
         </label>
         <input
           id="restaurantName"
@@ -223,6 +236,28 @@ export function TrialForm({ csrfToken }: { csrfToken: string }) {
           placeholder="مثال: مطعم الأصيل"
           className="rounded-xl border border-black/10 bg-[var(--color-bg)] px-4 py-3 text-sm outline-none transition-colors focus:border-[var(--color-accent-500)]"
         />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="businessType" className="text-sm font-bold text-[var(--color-navy-900)]">
+          نوع النشاط
+        </label>
+        <select
+          id="businessType"
+          name="businessType"
+          required
+          defaultValue=""
+          className="rounded-xl border border-black/10 bg-[var(--color-bg)] px-4 py-3 text-sm outline-none transition-colors focus:border-[var(--color-accent-500)]"
+        >
+          <option value="" disabled>
+            اختر نوع النشاط
+          </option>
+          {BUSINESS_TYPES.map((t: { id: BusinessType; label: string }) => (
+            <option key={t.id} value={t.id}>
+              {t.label}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="flex flex-col gap-1.5">
@@ -254,14 +289,53 @@ export function TrialForm({ csrfToken }: { csrfToken: string }) {
         />
       </div>
 
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="password" className="text-sm font-bold text-[var(--color-navy-900)]">
+          كلمة المرور
+        </label>
+        <div className="relative">
+          <input
+            id="password"
+            name="password"
+            type={showPassword ? "text" : "password"}
+            required
+            minLength={8}
+            dir="ltr"
+            placeholder="8 أحرف فأكثر، حرف ورقم"
+            className="w-full rounded-xl border border-black/10 bg-[var(--color-bg)] px-4 py-3 pl-11 text-sm outline-none transition-colors focus:border-[var(--color-accent-500)]"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword((v) => !v)}
+            aria-label={showPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
+            className="absolute inset-y-0 left-3 flex items-center text-[var(--color-muted)]"
+          >
+            {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+          </button>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="confirmPassword" className="text-sm font-bold text-[var(--color-navy-900)]">
+          تأكيد كلمة المرور
+        </label>
+        <input
+          id="confirmPassword"
+          name="confirmPassword"
+          type={showPassword ? "text" : "password"}
+          required
+          minLength={8}
+          dir="ltr"
+          placeholder="أعد إدخال كلمة المرور"
+          className="rounded-xl border border-black/10 bg-[var(--color-bg)] px-4 py-3 text-sm outline-none transition-colors focus:border-[var(--color-accent-500)]"
+        />
+      </div>
+
       {error && <p className="text-sm font-bold text-red-600">{error}</p>}
 
-      <p className="flex items-start gap-2 rounded-xl bg-[var(--color-bg)] p-3 text-xs leading-relaxed text-[var(--color-muted)]">
-        <ShieldCheck className="mt-0.5 shrink-0 text-[var(--color-accent-500)]" size={16} />
-        <span>
-          لا توجد كلمة مرور في هذه المرحلة — بعد الإرسال سنرسل لك رمز تحقق مكوّنًا من 6 أرقام إلى
-          بريدك الإلكتروني، وتدخل به مباشرة إلى لوحة تحكم مطعمك.
-        </span>
+      <p className="flex items-center gap-2 rounded-xl bg-[var(--color-bg)] p-3 text-xs leading-relaxed text-[var(--color-muted)]">
+        <Lock className="shrink-0 text-[var(--color-accent-500)]" size={16} />
+        <span>بياناتك مشفّرة ومحمية.</span>
       </p>
 
       <Button type="submit" disabled={phase === "submitting"} className="mt-2 w-full justify-center">
