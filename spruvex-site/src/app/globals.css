@@ -1,0 +1,174 @@
+@import "tailwindcss";
+
+:root {
+  --color-bg: #faf7f2;
+  --color-surface: #ffffff;
+
+  --color-navy-950: #050b16;
+  --color-navy-900: #0a1830;
+  --color-navy-800: #0f2445;
+  --color-navy-700: #16345f;
+  --color-navy-600: #1f4a83;
+
+  --color-accent-600: #c2410c;
+  --color-accent-500: #e8672a;
+  --color-accent-400: #f3894f;
+  --color-accent-300: #f9b183;
+
+  --color-maroon-700: #5c1a24;
+  --color-maroon-600: #7a2734;
+
+  --color-ink: #0a1830;
+  --color-muted: #5b6478;
+}
+
+@theme inline {
+  --color-bg: var(--color-bg);
+  --color-surface: var(--color-surface);
+  --color-navy-950: var(--color-navy-950);
+  --color-navy-900: var(--color-navy-900);
+  --color-navy-800: var(--color-navy-800);
+  --color-navy-700: var(--color-navy-700);
+  --color-navy-600: var(--color-navy-600);
+  --color-accent-600: var(--color-accent-600);
+  --color-accent-500: var(--color-accent-500);
+  --color-accent-400: var(--color-accent-400);
+  --color-accent-300: var(--color-accent-300);
+  --color-maroon-700: var(--color-maroon-700);
+  --color-maroon-600: var(--color-maroon-600);
+  --color-ink: var(--color-ink);
+  --color-muted: var(--color-muted);
+  --font-sans: var(--font-cairo);
+}
+
+* {
+  border-color: color-mix(in srgb, var(--color-navy-900) 10%, transparent);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+}
+
+::selection {
+  background: var(--color-accent-400);
+  color: white;
+}
+
+/* شريط تمرير أنحف وأنيق */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--color-navy-900) 25%, transparent);
+  border-radius: 999px;
+}
+
+/* ---------- Marquee: شريط الثقة المنزلق ---------- */
+@keyframes marquee-scroll {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+.marquee-track {
+  animation: marquee-scroll 28s linear infinite;
+}
+.marquee-track:hover {
+  animation-play-state: paused;
+}
+
+/* ---------- Shimmer: placeholder الشاشات الفارغة ---------- */
+@keyframes shimmer-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+.shimmer-sweep::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    color-mix(in srgb, white 35%, transparent) 50%,
+    transparent 70%
+  );
+  animation: shimmer-sweep 2.6s ease-in-out infinite;
+}
+
+/* ---------- نبضة خفيفة لإطار الجهاز الفارغ ---------- */
+@keyframes gentle-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+.animate-gentle-pulse {
+  animation: gentle-pulse 2.4s ease-in-out infinite;
+}
+
+/* ---------- مؤشر التمرير بالـ Hero ---------- */
+@keyframes scroll-indicator {
+  0% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  60% {
+    opacity: 0.4;
+  }
+  100% {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+}
+.animate-scroll-indicator {
+  animation: scroll-indicator 1.8s ease-in-out infinite;
+}
+
+/* ---------- نبض بطيء لشارة العرض ---------- */
+@keyframes soft-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-accent-500) 45%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 10px color-mix(in srgb, var(--color-accent-500) 0%, transparent);
+  }
+}
+.animate-soft-glow {
+  animation: soft-glow 2.2s ease-out infinite;
+}
+
+.text-balance {
+  text-wrap: balance;
+}
+
+.bg-noise {
+  background-image: radial-gradient(
+      circle at 20% 20%,
+      color-mix(in srgb, var(--color-accent-500) 12%, transparent),
+      transparent 40%
+    ),
+    radial-gradient(
+      circle at 85% 15%,
+      color-mix(in srgb, var(--color-navy-600) 18%, transparent),
+      transparent 45%
+    );
+}
