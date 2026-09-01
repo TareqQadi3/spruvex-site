@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { isAdminAuthenticated } from "@/lib/session";
 import { getUploadedFile } from "@/lib/repositories/paymentSubmissions";
-import { UPLOADS_DIR } from "@/lib/db";
+import { getUploadsDir } from "@/lib/db";
 
 /**
  * يُخدّم ملف الإيصال فقط لمستخدم إدارة موثّق، وفقط عبر معرّف UUID غير قابل
@@ -20,9 +20,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "الملف غير موجود" }, { status: 404 });
   }
 
-  // stored_filename هو UUID مولّد داخليًا فقط — لا مسار خارج UPLOADS_DIR ممكن.
-  const filePath = path.join(UPLOADS_DIR, file.stored_filename);
-  if (!filePath.startsWith(UPLOADS_DIR)) {
+  // stored_filename هو UUID مولّد داخليًا فقط — لا مسار خارج uploadsDir ممكن.
+  const uploadsDir = getUploadsDir();
+  const filePath = path.join(uploadsDir, file.stored_filename);
+  if (!filePath.startsWith(uploadsDir)) {
     return NextResponse.json({ error: "مسار غير صالح" }, { status: 400 });
   }
 

@@ -7,7 +7,7 @@ import { createPaymentSubmission, saveUploadedFile } from "@/lib/repositories/pa
 import { isCsrfTokenValid } from "@/lib/csrf";
 import { getClientIp, rateLimit } from "@/lib/rateLimit";
 import { isAllowedReceiptType, MAX_RECEIPT_SIZE_BYTES } from "@/lib/fileValidation";
-import { UPLOADS_DIR } from "@/lib/db";
+import { getUploadsDir } from "@/lib/db";
 
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
@@ -75,8 +75,10 @@ export async function POST(req: NextRequest) {
     }
 
     // اسم ملف عشوائي غير قابل للتخمين، بلا امتداد قابل للتنفيذ، خارج مجلد public/
+    const uploadsDir = getUploadsDir();
+    await fs.mkdir(uploadsDir, { recursive: true });
     const storedFilename = `${crypto.randomUUID()}.${detected.ext}`;
-    const storedPath = path.join(/* turbopackIgnore: true */ UPLOADS_DIR, storedFilename);
+    const storedPath = path.join(/* turbopackIgnore: true */ uploadsDir, storedFilename);
     await fs.writeFile(storedPath, buffer, { mode: 0o600 });
 
     const record = saveUploadedFile({

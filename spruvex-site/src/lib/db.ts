@@ -18,21 +18,33 @@ import path from "node:path";
  * data/ بجذر المشروع للتطوير المحلي.
  */
 
-const DATA_DIR = process.env.DATA_DIR
-  ? path.resolve(process.env.DATA_DIR)
-  : path.join(process.cwd(), "data");
-const DB_PATH = path.join(DATA_DIR, "spruvex-site.db");
-export const UPLOADS_DIR = path.join(DATA_DIR, "uploads");
+// ⚠️ لا أي I/O هنا على مستوى الوحدة (module scope) — Next.js يستورد ملفات
+// الـ API routes وقت "Collecting page data" أثناء next build لفحصها، وليس
+// فقط وقت الطلب الفعلي. أي كود يعمل هنا مباشرة (بدل داخل دالة) يُنفَّذ حتى
+// أثناء البناء — حيث DATA_DIR (خصوصًا مسار قرص Render الدائم /var/data) قد
+// لا يكون موجودًا أو قابلًا للكتابة بعد (القرص يُركَّب فقط على الخدمة الفعلية
+// وقت التشغيل، وليس أثناء حاوية البناء). لهذا كل إنشاء مجلد/فتح اتصال مؤجَّل
+// لدالة getDb() فقط، التي لا تُستدعى إلا من داخل معالجات الطلبات (route handlers).
+function resolveDataDir(): string {
+  return process.env.DATA_DIR
+    ? path.resolve(process.env.DATA_DIR)
+    : path.join(process.cwd(), "data");
+}
 
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+export function getUploadsDir(): string {
+  return path.join(resolveDataDir(), "uploads");
+}
 
 declare global {
   var __spruvexDb: Database.Database | undefined;
 }
 
 function createConnection(): Database.Database {
-  const db = new Database(DB_PATH);
+  const dataDir = resolveDataDir();
+  fs.mkdirSync(dataDir, { recursive: true });
+  fs.mkdirSync(path.join(dataDir, "uploads"), { recursive: true });
+
+  const db = new Database(path.join(dataDir, "spruvex-site.db"));
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
   db.exec(`
