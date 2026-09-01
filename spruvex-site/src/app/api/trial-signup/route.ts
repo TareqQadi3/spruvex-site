@@ -1,8 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { trialSignupSchema } from "@/lib/validation";
-import { createTrialSignup } from "@/lib/repositories/trialSignups";
+import {
+  createTrialSignup,
+  markTrialSignupManualReview,
+  markTrialSignupProvisioned,
+} from "@/lib/repositories/trialSignups";
 import { isCsrfTokenValid } from "@/lib/csrf";
 import { getClientIp, rateLimit } from "@/lib/rateLimit";
+import { createSpruvexRTrial } from "@/lib/spruvexR";
 
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
@@ -34,7 +39,33 @@ export async function POST(req: NextRequest) {
   }
 
   const { restaurantName, phone, email } = parsed.data;
-  createTrialSignup({ restaurantName, phone, email });
 
-  return NextResponse.json({ ok: true });
+  // سجل احتياطي/متابعة مبيعات محلي — يبقى دائمًا بغض النظر عن نجاح الخطوة التالية.
+  const localRecord = createTrialSignup({ restaurantName, phone, email });
+
+  const provisioning = await createSpruvexRTrial({ restaurantName, phone, email });
+
+  if (provisioning.ok) {
+    markTrialSignupProvisioned(localRecord.id, {
+      tenantId: provisioning.tenantId,
+      dashboardUrl: provisioning.dashboardUrl,
+    });
+    return NextResponse.json({
+      ok: true,
+      provisioned: true,
+      email: provisioning.email,
+      dashboardUrl: provisioning.dashboardUrl,
+    });
+  }
+
+  // أي فشل من spruvex-r (شبكة/تهيئة/5xx/جوال مكرر 409) لا يُفشل تجربة
+  // المستخدم — السجل المحلي يبقى، فقط يُعلَّم لمراجعة يدوية، ويُسجَّل الخطأ
+  // بوضوح بالسجلات (server logs) لمتابعته من الفريق.
+  markTrialSignupManualReview(localRecord.id);
+  console.error(
+    `[trial-signup] spruvex-r provisioning failed for signup #${localRecord.id} (${email}): ` +
+      `reason=${provisioning.reason} status=${provisioning.status ?? "-"} message=${provisioning.message ?? "-"}`
+  );
+
+  return NextResponse.json({ ok: true, provisioned: false });
 }

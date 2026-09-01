@@ -1,23 +1,24 @@
 import { getDb } from "@/lib/db";
 import type { TrialSignupInput } from "@/lib/validation";
 
+export type TrialSignupStatus = "new" | "provisioned" | "manual_review";
+
 export interface TrialSignupRow {
   id: number;
   restaurant_name: string;
   phone: string;
   email: string;
-  status: string;
+  status: TrialSignupStatus;
+  tenant_id: string | null;
+  dashboard_url: string | null;
   created_at: string;
 }
 
 /**
- * يخزّن طلب التجربة المجانية محليًا فقط.
- *
- * TODO(integration): هذه *ليست* نقطة الحقيقة النهائية لإنشاء Tenant. الخطوة
- * التالية بعد جاهزية مشروع spruvex-r هي استدعاء نقطة نهاية آمنة هناك
- * (مثال: POST https://api.spruvex-r.com/internal/tenants من هذا الـ handler
- * أو عبر Webhook/Queue) لإنشاء المطعم فعليًا وإرسال بيانات الدخول. حاليًا
- * التفعيل يدوي بالكامل من فريق المبيعات بناءً على هذا الجدول.
+ * يخزّن طلب التجربة المجانية محليًا أولاً (سجل احتياطي/متابعة مبيعات يبقى
+ * دائمًا بغض النظر عن نجاح أو فشل الخطوة التالية). استدعاء spruvex-r الفعلي
+ * لإنشاء Tenant يحدث بعد هذا في src/app/api/trial-signup/route.ts، والنتيجة
+ * تُسجَّل عبر markTrialSignupProvisioned/markTrialSignupManualReview أدناه.
  */
 export function createTrialSignup(input: Omit<TrialSignupInput, "csrfToken">): TrialSignupRow {
   const db = getDb();
@@ -30,6 +31,28 @@ export function createTrialSignup(input: Omit<TrialSignupInput, "csrfToken">): T
   return db
     .prepare("SELECT * FROM trial_signups WHERE id = ?")
     .get(result.lastInsertRowid) as TrialSignupRow;
+}
+
+/** نجح استدعاء spruvex-r فعليًا — يربط السجل المحلي بالـ Tenant الحقيقي. */
+export function markTrialSignupProvisioned(
+  id: number,
+  data: { tenantId: string; dashboardUrl: string }
+): void {
+  const db = getDb();
+  db.prepare(
+    `UPDATE trial_signups
+     SET status = 'provisioned', tenant_id = @tenantId, dashboard_url = @dashboardUrl
+     WHERE id = @id`
+  ).run({ id, ...data });
+}
+
+/**
+ * فشل استدعاء spruvex-r (شبكة/5xx/جوال مكرر 409) — السجل يبقى موجودًا،
+ * فقط يُعلَّم لمراجعة يدوية بدل أن يضيع الطلب أو تفشل تجربة المستخدم.
+ */
+export function markTrialSignupManualReview(id: number): void {
+  const db = getDb();
+  db.prepare("UPDATE trial_signups SET status = 'manual_review' WHERE id = ?").run(id);
 }
 
 export function listTrialSignups(limit = 100): TrialSignupRow[] {

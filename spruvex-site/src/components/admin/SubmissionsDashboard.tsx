@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, ExternalLink, LogOut, RefreshCcw, X } from "lucide-react";
+import type { TrialSignupStatus } from "@/lib/repositories/trialSignups";
 import { PLANS } from "@/lib/constants";
 
 interface PaymentSubmission {
@@ -23,9 +24,23 @@ interface TrialSignup {
   restaurant_name: string;
   phone: string;
   email: string;
-  status: string;
+  status: TrialSignupStatus;
+  tenant_id: string | null;
+  dashboard_url: string | null;
   created_at: string;
 }
+
+const trialStatusStyle: Record<TrialSignupStatus, string> = {
+  new: "bg-slate-100 text-slate-600",
+  provisioned: "bg-emerald-100 text-emerald-700",
+  manual_review: "bg-amber-100 text-amber-700",
+};
+
+const trialStatusLabel: Record<TrialSignupStatus, string> = {
+  new: "قيد المعالجة",
+  provisioned: "تم التفعيل تلقائيًا",
+  manual_review: "يحتاج مراجعة يدوية",
+};
 
 const planName = (id: string) => PLANS.find((p) => p.id === id)?.name ?? id;
 
@@ -211,13 +226,14 @@ export function SubmissionsDashboard() {
                 <th className="p-4 font-bold">المطعم</th>
                 <th className="p-4 font-bold">الجوال</th>
                 <th className="p-4 font-bold">البريد</th>
+                <th className="p-4 font-bold">الحالة</th>
                 <th className="p-4 font-bold">تاريخ الطلب</th>
               </tr>
             </thead>
             <tbody>
               {trials.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="p-8 text-center text-[var(--color-muted)]">
+                  <td colSpan={5} className="p-8 text-center text-[var(--color-muted)]">
                     لا توجد طلبات بعد
                   </td>
                 </tr>
@@ -227,6 +243,25 @@ export function SubmissionsDashboard() {
                   <td className="p-4 font-bold text-[var(--color-navy-900)]">{t.restaurant_name}</td>
                   <td dir="ltr" className="p-4 text-[var(--color-muted)]">{t.phone}</td>
                   <td dir="ltr" className="p-4 text-[var(--color-muted)]">{t.email}</td>
+                  <td className="p-4">
+                    <div className="flex flex-col gap-1">
+                      <span
+                        className={`w-fit rounded-full px-2.5 py-1 text-xs font-bold ${trialStatusStyle[t.status]}`}
+                      >
+                        {trialStatusLabel[t.status]}
+                      </span>
+                      {t.status === "provisioned" && t.dashboard_url && (
+                        <a
+                          href={t.dashboard_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-xs text-[var(--color-accent-600)] hover:underline"
+                        >
+                          فتح لوحة المطعم <ExternalLink size={11} />
+                        </a>
+                      )}
+                    </div>
+                  </td>
                   <td className="p-4 text-[var(--color-muted)]">
                     {new Date(t.created_at).toLocaleString("ar-SA-u-nu-latn")}
                   </td>

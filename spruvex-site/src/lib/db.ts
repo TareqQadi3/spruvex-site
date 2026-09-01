@@ -35,7 +35,14 @@ function createConnection(): Database.Database {
       restaurant_name TEXT NOT NULL,
       phone TEXT NOT NULL,
       email TEXT NOT NULL,
+      -- 'new' لحظة الإدخال المحلي فقط (تُستبدل بأحد التاليين بنفس الطلب):
+      -- 'provisioned'    = نجح إنشاء Tenant فعلي في spruvex-r (tenant_id/dashboard_url معبّأة)
+      -- 'manual_review'  = فشل استدعاء spruvex-r (شبكة/5xx/جوال مكرر) — يحتاج مراجعة يدوية من الفريق
       status TEXT NOT NULL DEFAULT 'new',
+      -- معرّف Tenant الراجع من POST {SPRUVEX_R_API_URL}/api/v1/public/trial-signup — NULL إن لم يُنشأ بعد.
+      tenant_id TEXT,
+      -- رابط لوحة تحكم هذا المستأجر بـ spruvex-r — NULL إن لم يُنشأ بعد.
+      dashboard_url TEXT,
       created_at TEXT NOT NULL
     );
 
@@ -69,6 +76,20 @@ function createConnection(): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_payment_submissions_status ON payment_submissions(status);
     CREATE INDEX IF NOT EXISTS idx_trial_signups_created ON trial_signups(created_at);
   `);
+
+  // ترقية بسيطة لقواعد بيانات محلية أُنشئت قبل إضافة عمودي tenant_id/dashboard_url —
+  // لا أداة migrations رسمية بهذه المرحلة، فهذا فحص idempotent صغير بدلها.
+  const trialSignupColumns = db
+    .prepare("PRAGMA table_info(trial_signups)")
+    .all() as { name: string }[];
+  const existingColumns = new Set(trialSignupColumns.map((c) => c.name));
+  if (!existingColumns.has("tenant_id")) {
+    db.exec("ALTER TABLE trial_signups ADD COLUMN tenant_id TEXT");
+  }
+  if (!existingColumns.has("dashboard_url")) {
+    db.exec("ALTER TABLE trial_signups ADD COLUMN dashboard_url TEXT");
+  }
+
   return db;
 }
 

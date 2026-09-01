@@ -34,6 +34,22 @@ export const trialSignupSchema = z.object({
 });
 export type TrialSignupInput = z.infer<typeof trialSignupSchema>;
 
+export const trialOtpVerifySchema = z.object({
+  email: emailSchema,
+  code: z
+    .string()
+    .trim()
+    .regex(/^\d{6}$/, "رمز التحقق يتكوّن من 6 أرقام"),
+  csrfToken: z.string().min(1),
+});
+export type TrialOtpVerifyInput = z.infer<typeof trialOtpVerifySchema>;
+
+export const trialOtpResendSchema = z.object({
+  email: emailSchema,
+  csrfToken: z.string().min(1),
+});
+export type TrialOtpResendInput = z.infer<typeof trialOtpResendSchema>;
+
 const PLAN_IDS = PLANS.map((p) => p.id) as [PlanId, ...PlanId[]];
 
 export const paymentSubmissionSchema = z.object({
