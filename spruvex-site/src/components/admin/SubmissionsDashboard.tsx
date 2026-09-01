@@ -34,12 +34,14 @@ const trialStatusStyle: Record<TrialSignupStatus, string> = {
   new: "bg-slate-100 text-slate-600",
   provisioned: "bg-emerald-100 text-emerald-700",
   manual_review: "bg-amber-100 text-amber-700",
+  duplicate: "bg-sky-100 text-sky-700",
 };
 
 const trialStatusLabel: Record<TrialSignupStatus, string> = {
   new: "قيد المعالجة",
   provisioned: "تم التفعيل تلقائيًا",
   manual_review: "يحتاج مراجعة يدوية",
+  duplicate: "بريد/جوال مسجّل مسبقًا",
 };
 
 const planName = (id: string) => PLANS.find((p) => p.id === id)?.name ?? id;

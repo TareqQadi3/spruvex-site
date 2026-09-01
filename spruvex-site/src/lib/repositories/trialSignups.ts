@@ -1,7 +1,7 @@
 import { getDb } from "@/lib/db";
 import type { TrialSignupInput } from "@/lib/validation";
 
-export type TrialSignupStatus = "new" | "provisioned" | "manual_review";
+export type TrialSignupStatus = "new" | "provisioned" | "manual_review" | "duplicate";
 
 export interface TrialSignupRow {
   id: number;
@@ -53,6 +53,29 @@ export function markTrialSignupProvisioned(
 export function markTrialSignupManualReview(id: number): void {
   const db = getDb();
   db.prepare("UPDATE trial_signups SET status = 'manual_review' WHERE id = ?").run(id);
+}
+
+/**
+ * فشل استدعاء spruvex-r بسبب جوال/بريد مسجّل مسبقًا (409) — هذه ليست حالة
+ * "فشل يحتاج مراجعة يدوية"، بل تعني أن صاحب الطلب لديه حساب فعلاً، فتُعلَّم
+ * بحالة مختلفة حتى تُعرض له رسالة دقيقة بدل رسالة "سيتم التفعيل خلال ساعات"
+ * المُضلِّلة في هذه الحالة تحديدًا.
+ */
+export function markTrialSignupDuplicate(id: number): void {
+  const db = getDb();
+  db.prepare("UPDATE trial_signups SET status = 'duplicate' WHERE id = ?").run(id);
+}
+
+/**
+ * أحدث سجل بنفس البريد إن وُجد — يُستخدم للتحقق المحلي من التكرار قبل حتى
+ * استدعاء spruvex-r (بدل الاعتماد فقط على رفض spruvex-r لتكرار الجوال)،
+ * ولإيجاد dashboard_url المخزَّن محليًا عند إرسال بريد الترحيب بعد التحقق.
+ */
+export function findTrialSignupByEmail(email: string): TrialSignupRow | undefined {
+  const db = getDb();
+  return db
+    .prepare("SELECT * FROM trial_signups WHERE email = ? ORDER BY created_at DESC LIMIT 1")
+    .get(email) as TrialSignupRow | undefined;
 }
 
 export function listTrialSignups(limit = 100): TrialSignupRow[] {

@@ -3,6 +3,8 @@ import { trialOtpVerifySchema } from "@/lib/validation";
 import { isCsrfTokenValid } from "@/lib/csrf";
 import { getClientIp, rateLimit } from "@/lib/rateLimit";
 import { verifySpruvexRTrialOtp } from "@/lib/spruvexR";
+import { findTrialSignupByEmail } from "@/lib/repositories/trialSignups";
+import { sendWelcomeEmail } from "@/lib/email";
 
 /**
  * وسيط (proxy) من جانب السيرفر فقط لنقطة التحقق الحقيقية بـ spruvex-r
@@ -47,6 +49,25 @@ export async function POST(req: NextRequest) {
   });
 
   if (result.ok) {
+    // بريد الترحيب "best-effort": فشل إرساله لا يُفشل تسجيل الدخول — المستخدم
+    // تحقق فعليًا وله dashboardUrl من استجابة التسجيل الأصلية بالفعل.
+    const record = findTrialSignupByEmail(parsed.data.email);
+    if (record?.dashboard_url) {
+      const emailResult = await sendWelcomeEmail({
+        to: parsed.data.email,
+        restaurantName: record.restaurant_name,
+        dashboardUrl: record.dashboard_url,
+      });
+      if (!emailResult.ok) {
+        console.error(
+          `[trial-signup/verify] welcome email failed for ${parsed.data.email}: ${emailResult.message}`
+        );
+      }
+    } else {
+      console.error(
+        `[trial-signup/verify] no local record/dashboard_url found for ${parsed.data.email} — welcome email skipped`
+      );
+    }
     return NextResponse.json({ ok: true });
   }
 

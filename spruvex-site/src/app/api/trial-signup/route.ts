@@ -2,12 +2,15 @@ import { NextResponse, type NextRequest } from "next/server";
 import { trialSignupSchema } from "@/lib/validation";
 import {
   createTrialSignup,
+  findTrialSignupByEmail,
+  markTrialSignupDuplicate,
   markTrialSignupManualReview,
   markTrialSignupProvisioned,
 } from "@/lib/repositories/trialSignups";
 import { isCsrfTokenValid } from "@/lib/csrf";
 import { getClientIp, rateLimit } from "@/lib/rateLimit";
 import { createSpruvexRTrial } from "@/lib/spruvexR";
+import { sendAdminSignupAlertEmail } from "@/lib/email";
 
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
@@ -40,6 +43,24 @@ export async function POST(req: NextRequest) {
 
   const { restaurantName, phone, email } = parsed.data;
 
+  async function notifyAdmin(status: "provisioned" | "manual_review" | "duplicate") {
+    const result = await sendAdminSignupAlertEmail({ restaurantName, phone, email, status });
+    if (!result.ok) {
+      console.error(`[trial-signup] admin alert email failed for ${email}: ${result.message}`);
+    }
+  }
+
+  // فحص تكرار محلي قبل حتى استدعاء spruvex-r: لو هذا البريد لديه بالفعل حساب
+  // فعلي (provisioned) من طلب سابق، لا داعي لجولة شبكة جديدة ولا لسجل محلي
+  // مكرر — ولا تناسب هنا رسالة "سيتم التفعيل خلال ساعات" المُضلِّلة لأن
+  // الحساب موجود فعلًا. هذا فحص إضافي محلي، وليس بديلاً عن قيد تفرّد الجوال
+  // الحقيقي بجانب spruvex-r (الذي يبقى المرجع الحاسم ضد أي تلاعب/سباق).
+  const existing = findTrialSignupByEmail(email);
+  if (existing?.status === "provisioned") {
+    await notifyAdmin("duplicate");
+    return NextResponse.json({ ok: true, provisioned: false, alreadyRegistered: true });
+  }
+
   // سجل احتياطي/متابعة مبيعات محلي — يبقى دائمًا بغض النظر عن نجاح الخطوة التالية.
   const localRecord = createTrialSignup({ restaurantName, phone, email });
 
@@ -50,6 +71,7 @@ export async function POST(req: NextRequest) {
       tenantId: provisioning.tenantId,
       dashboardUrl: provisioning.dashboardUrl,
     });
+    await notifyAdmin("provisioned");
     return NextResponse.json({
       ok: true,
       provisioned: true,
@@ -58,14 +80,24 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // أي فشل من spruvex-r (شبكة/تهيئة/5xx/جوال مكرر 409) لا يُفشل تجربة
-  // المستخدم — السجل المحلي يبقى، فقط يُعلَّم لمراجعة يدوية، ويُسجَّل الخطأ
-  // بوضوح بالسجلات (server logs) لمتابعته من الفريق.
+  // 409 من spruvex-r (بعد استنفاد إعادة المحاولات للأخطاء العابرة أعلاه) يعني
+  // جوال أو بريد مسجّل مسبقًا فعليًا — ليست حالة "تحتاج مراجعة يدوية"، بل
+  // "لديك حساب بالفعل". تُعلَّم بحالة مختلفة وتُعرض رسالة دقيقة للمستخدم.
+  if (provisioning.reason === "duplicate_phone") {
+    markTrialSignupDuplicate(localRecord.id);
+    await notifyAdmin("duplicate");
+    return NextResponse.json({ ok: true, provisioned: false, alreadyRegistered: true });
+  }
+
+  // أي فشل حقيقي آخر من spruvex-r (شبكة/تهيئة/5xx) بعد استنفاد المحاولات —
+  // لا يُفشل تجربة المستخدم. السجل المحلي يبقى، فقط يُعلَّم لمراجعة يدوية،
+  // ويُسجَّل الخطأ بوضوح بالسجلات (server logs) لمتابعته من الفريق.
   markTrialSignupManualReview(localRecord.id);
   console.error(
     `[trial-signup] spruvex-r provisioning failed for signup #${localRecord.id} (${email}): ` +
       `reason=${provisioning.reason} status=${provisioning.status ?? "-"} message=${provisioning.message ?? "-"}`
   );
+  await notifyAdmin("manual_review");
 
   return NextResponse.json({ ok: true, provisioned: false });
 }

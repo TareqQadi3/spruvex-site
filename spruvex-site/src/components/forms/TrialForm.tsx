@@ -10,6 +10,7 @@ type Phase =
   | "form"
   | "submitting"
   | "manual_review"
+  | "already_registered"
   | "otp"
   | "verifying"
   | "redirecting"
@@ -54,6 +55,8 @@ export function TrialForm({ csrfToken }: { csrfToken: string }) {
         setEmail(data.email ?? submittedEmail);
         setDashboardUrl(data.dashboardUrl ?? "");
         setPhase("otp");
+      } else if (data.alreadyRegistered) {
+        setPhase("already_registered");
       } else {
         setPhase("manual_review");
       }
@@ -117,6 +120,26 @@ export function TrialForm({ csrfToken }: { csrfToken: string }) {
         <p className="max-w-sm text-sm leading-relaxed text-[var(--color-muted)]">
           سيتم تفعيل حسابك خلال ساعات من فريقنا، وسنتواصل معك على رقم الجوال أو البريد المُدخل
           لإرسال بيانات الدخول.
+        </p>
+      </motion.div>
+    );
+  }
+
+  if (phase === "already_registered") {
+    return (
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="flex flex-col items-center gap-4 rounded-3xl border border-black/5 bg-white p-10 text-center"
+      >
+        <ShieldCheck className="text-[var(--color-accent-500)]" size={52} />
+        <h3 className="text-xl font-extrabold text-[var(--color-navy-900)]">
+          لديك حساب مسجّل بالفعل
+        </h3>
+        <p className="max-w-sm text-sm leading-relaxed text-[var(--color-muted)]">
+          رقم الجوال أو البريد الإلكتروني المُدخل مرتبط بحساب SpruVex R موجود مسبقًا — التجربة
+          المجانية مرة واحدة لكل مطعم. سجّل الدخول بحسابك الحالي، أو تواصل معنا إن كنت تحتاج
+          مساعدة.
         </p>
       </motion.div>
     );
@@ -232,6 +255,14 @@ export function TrialForm({ csrfToken }: { csrfToken: string }) {
       </div>
 
       {error && <p className="text-sm font-bold text-red-600">{error}</p>}
+
+      <p className="flex items-start gap-2 rounded-xl bg-[var(--color-bg)] p-3 text-xs leading-relaxed text-[var(--color-muted)]">
+        <ShieldCheck className="mt-0.5 shrink-0 text-[var(--color-accent-500)]" size={16} />
+        <span>
+          لا توجد كلمة مرور في هذه المرحلة — بعد الإرسال سنرسل لك رمز تحقق مكوّنًا من 6 أرقام إلى
+          بريدك الإلكتروني، وتدخل به مباشرة إلى لوحة تحكم مطعمك.
+        </span>
+      </p>
 
       <Button type="submit" disabled={phase === "submitting"} className="mt-2 w-full justify-center">
         {phase === "submitting" ? (

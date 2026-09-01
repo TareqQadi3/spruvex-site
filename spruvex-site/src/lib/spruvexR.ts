@@ -67,6 +67,12 @@ async function postJson(
   }
 }
 
+function isRetryableOutcome(outcome: FetchOutcome): boolean {
+  if (outcome.kind === "network_error") return true;
+  if (outcome.kind === "response" && outcome.status >= 500) return true;
+  return false;
+}
+
 export interface CreateSpruvexRTrialInput {
   restaurantName: string;
   phone: string;
@@ -90,13 +96,38 @@ export type CreateSpruvexRTrialResult =
       message?: string;
     };
 
-/** POST /api/v1/public/trial-signup — ينشئ Tenant تجريبي فعلي بـ spruvex-r. */
+const RETRYABLE_DELAYS_MS = [400, 900];
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * POST /api/v1/public/trial-signup — ينشئ Tenant تجريبي فعلي بـ spruvex-r.
+ *
+ * يعيد المحاولة تلقائيًا (بحد أقصى محاولتين إضافيتين) فقط عند فشل عابر محتمل
+ * (شبكة/انقطاع، أو خطأ 5xx من السيرفر) — وليس عند 401 (تهيئة خاطئة، إعادة
+ * المحاولة لن تُصلحها) ولا 409 (جوال/بريد مسجّل مسبقًا، إعادة المحاولة تكرار
+ * غير مجدٍ). الهدف: لا تُعرض رسالة "يحتاج مراجعة يدوية" للمستخدم إلا بعد فشل
+ * حقيقي مؤكَّد، وليس عند أول عثرة شبكة مؤقتة.
+ * إعادة المحاولة آمنة هنا تحديدًا لأن provisionTenant محمي بقيد تفرّد الجوال
+ * بجانب spruvex-r: لو المحاولة الأولى نجحت فعلًا لكن الاستجابة ضاعت شبكيًا،
+ * ستُرجع المحاولة الثانية 409 (duplicate_phone) بدل تكرار إنشاء Tenant.
+ */
 export async function createSpruvexRTrial(
   input: CreateSpruvexRTrialInput
 ): Promise<CreateSpruvexRTrialResult> {
-  const outcome = await postJson("/public/trial-signup", input, {
+  let outcome = await postJson("/public/trial-signup", input, {
     "x-spruvex-site-key": safeSiteApiKeyOrEmpty(),
   });
+
+  for (const delay of RETRYABLE_DELAYS_MS) {
+    if (!isRetryableOutcome(outcome)) break;
+    await sleep(delay);
+    outcome = await postJson("/public/trial-signup", input, {
+      "x-spruvex-site-key": safeSiteApiKeyOrEmpty(),
+    });
+  }
 
   if (outcome.kind === "config_error") {
     return { ok: false, reason: "invalid_config", message: outcome.message };

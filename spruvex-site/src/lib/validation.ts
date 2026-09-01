@@ -27,7 +27,15 @@ export const restaurantNameSchema = z
   .min(2, "اسم المطعم قصير جدًا")
   .max(120, "اسم المطعم طويل جدًا");
 
-export const emailSchema = z.string().trim().email("بريد إلكتروني غير صحيح").max(190);
+// .toLowerCase() ليطابق نفس التطبيع الذي يطبّقه spruvex-r على البريد
+// (SitePublicService: email.toLowerCase())، فلا يُعامَل Test@x.com وtest@x.com
+// كحسابين مختلفين عند فحص التكرار محليًا أو بجانب spruvex-r.
+export const emailSchema = z
+  .string()
+  .trim()
+  .email("بريد إلكتروني غير صحيح")
+  .max(190)
+  .transform((val) => val.toLowerCase());
 
 export const trialSignupSchema = z.object({
   restaurantName: restaurantNameSchema,

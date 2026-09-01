@@ -48,6 +48,16 @@ services:
         sync: false
       - key: ADMIN_SESSION_SECRET
         sync: false
+      # --- تكامل بريد Resend (بريد تحقق/ترحيب/تنبيه إدارة) ---
+      - key: RESEND_API_KEY
+        sync: false
+      # عنوان "من" — يجب أن يكون على نطاق مُتحقَّق منه فعليًا بحساب Resend،
+      # وإلا سيرفض Resend كل الرسائل.
+      - key: RESEND_FROM_EMAIL
+        sync: false
+      # بريد مالك المنصة — الوجهة التي تصل إليها تنبيهات "تسجيل جديد".
+      - key: ADMIN_ALERT_EMAIL
+        sync: false
     disk:
       name: spruvex-site-data
       mountPath: /var/data
