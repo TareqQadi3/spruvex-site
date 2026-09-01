@@ -1,0 +1,54 @@
+# Render Blueprint — ينشر موقع spruvex-site التسويقي (Next.js) كخدمة Node
+# واحدة مع قرص دائم (Persistent Disk) لملف قاعدة بيانات SQLite المحلية.
+#
+# غير مُتحقَّق منه بنشر فعلي: هذه البيئة (sandbox) لا تملك وصولًا لحساب Render
+# ولا لشبكة render.com لتجربة نشر حقيقي أو تصفح توثيقهم مباشرة (egress محظور
+# لهذا النطاق تحديدًا بهذه الجلسة) — نفس تحفّظ render.yaml بمشروع spruvex-r.
+# القيم أدناه مبنية على معرفة موثّقة بمواصفة Render Blueprint، لكن راجع لوحة
+# Render فعليًا بعد أول نشر للتأكد (خصوصًا: اسم الخطة/الفئة المطلوبة فعليًا
+# لدعم Persistent Disk في حسابك).
+#
+# ⚠️ Persistent Disk على Render — قيود مهمة (تحقق منها بنفسك بلوحة Render أو
+# توثيقهم الرسمي قبل الاعتماد الكامل، لم أستطع تصفّحه من هنا):
+#   - غير متاح على الخطة المجانية (Free) — يتطلب خطة مدفوعة (Starter فأعلى).
+#   - الخدمة يجب أن تعمل بـ instance واحد فقط — لا يمكن الجمع بين Persistent
+#     Disk وبين Auto-scaling أو أكثر من نسخة (SQLite أصلًا لا يدعم كتابة
+#     متزامنة من عدة عمليات، فهذا القيد متوافق مع تصميم المشروع لا يعارضه).
+#   - محتوى القرص يبقى بين عمليات النشر (deploys) وإعادة التشغيل، لكنه غير
+#     منسوخ احتياطيًا تلقائيًا بالضرورة — لا تعتمد عليه كنسخة احتياطية وحيدة
+#     لبيانات حقيقية دون خطة نسخ احتياطي إضافية.
+
+services:
+  - type: web
+    name: spruvex-site
+    runtime: node
+    # المستودع الحالي يحوي spruvex-site/ و spruvex-app/ كمجلدين شقيقين —
+    # rootDir يحصر كل أوامر البناء/التشغيل داخل تطبيق Next.js الفعلي فقط.
+    rootDir: spruvex-site
+    plan: starter
+    region: oregon
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      # المسار يجب أن يطابق mountPath الخاص بالقرص أدناه بالضبط —
+      # db.ts يقرأ DATA_DIR ليقرر أين يخزّن ملف SQLite ومجلد الإيصالات.
+      - key: DATA_DIR
+        value: /var/data
+      # --- تُضبط يدويًا بلوحة Render (sync: false) — لا تُولَّد تلقائيًا ---
+      - key: SPRUVEX_R_API_URL
+        sync: false
+      - key: SPRUVEX_SITE_API_KEY
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ADMIN_SESSION_SECRET
+        sync: false
+    disk:
+      name: spruvex-site-data
+      mountPath: /var/data
+      sizeGB: 1

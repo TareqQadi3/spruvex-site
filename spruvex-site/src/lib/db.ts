@@ -6,15 +6,21 @@ import path from "node:path";
  * طبقة قاعدة بيانات بسيطة (SQLite) لهذه المرحلة فقط.
  *
  * ⚠️ ملاحظة نشر مهمة: SQLite هنا ملف محلي على القرص (data/spruvex-site.db).
- * هذا يعمل بشكل ممتاز على استضافة Node.js دائمة (VPS / Docker) مع Volume دائم،
- * لكنه **لا يعمل بشكل موثوق على منصات Serverless عديمة الحالة مثل Vercel**
- * (نظام الملفات مؤقت هناك). عند الانتقال لإنتاج فعلي على Serverless، استبدل
- * هذا الملف باتصال Postgres (مثلاً عبر Prisma) — الجداول والدوال هنا مصممة
- * عمدًا بواجهة (repository functions) تسهّل هذا الاستبدال دون تغيير الصفحات
- * أو نقاط الـ API التي تستدعيها.
+ * هذا يعمل بشكل ممتاز على استضافة Node.js دائمة (VPS / Docker / Render Web
+ * Service مع Persistent Disk) لكنه **لا يعمل بشكل موثوق على منصات Serverless
+ * عديمة الحالة مثل Vercel** (نظام الملفات هناك مؤقت). عند الانتقال لإنتاج
+ * فعلي على Serverless، استبدل هذا الملف باتصال Postgres (مثلاً عبر Prisma) —
+ * الجداول والدوال هنا مصممة عمدًا بواجهة (repository functions) تسهّل هذا
+ * الاستبدال دون تغيير الصفحات أو نقاط الـ API التي تستدعيها.
+ *
+ * المسار قابل للضبط عبر DATA_DIR (مطلوب على Render: يُضبط ليطابق mountPath
+ * الخاص بالـ Persistent Disk في render.yaml بالضبط) — يرجع افتراضيًا لمجلد
+ * data/ بجذر المشروع للتطوير المحلي.
  */
 
-const DATA_DIR = path.join(process.cwd(), "data");
+const DATA_DIR = process.env.DATA_DIR
+  ? path.resolve(process.env.DATA_DIR)
+  : path.join(process.cwd(), "data");
 const DB_PATH = path.join(DATA_DIR, "spruvex-site.db");
 export const UPLOADS_DIR = path.join(DATA_DIR, "uploads");
 

@@ -122,15 +122,36 @@ src/
 
 ## ⚠️ ملاحظة نشر مهمة: قاعدة البيانات SQLite
 
-`better-sqlite3` يخزّن البيانات في ملف `data/spruvex-site.db` على القرص (و`data/uploads/`
-للإيصالات). هذا يعمل بشكل ممتاز على استضافة **Node.js دائمة** (VPS / Docker) مع Volume
-دائم يحفظ مجلد `data/`.
+`better-sqlite3` يخزّن البيانات في ملف `<DATA_DIR>/spruvex-site.db` على القرص
+(و`<DATA_DIR>/uploads/` للإيصالات) — `DATA_DIR` قابل للضبط عبر متغير بيئة (افتراضيًا
+`data/` بجذر المشروع للتطوير المحلي). هذا يعمل بشكل ممتاز على استضافة **Node.js دائمة**
+مع تخزين دائم (VPS / Docker مع Volume، أو **Render Web Service مع Persistent Disk** —
+انظر `render.yaml` وقسم النشر أدناه).
 
 **لا يعمل بشكل موثوق على منصات Serverless عديمة الحالة مثل Vercel** لأن نظام الملفات
 هناك مؤقت (يُمسح بين الطلبات/عمليات النشر). عند الانتقال لإنتاج فعلي على منصة
 Serverless، استبدل طبقة `src/lib/db.ts` باتصال Postgres (مثلاً عبر Prisma) — دوال
 الـ repositories (`createTrialSignup`, `createPaymentSubmission`, إلخ) مصممة كواجهة
 مستقلة عن التخزين لتسهيل هذا الاستبدال دون تغيير أي صفحة أو نقطة API تستدعيها.
+
+## النشر على Render
+
+`render.yaml` بجذر المستودع (وليس داخل `spruvex-site/`) يصف خدمة Node واحدة
+(`rootDir: spruvex-site`) مع Persistent Disk مثبَّت على `/var/data` لملف SQLite.
+
+⚠️ **لم يُختبر بنشر فعلي على Render من هذه الجلسة** (لا وصول لحساب Render ولا لشبكة
+render.com من هذه البيئة) — القيم مبنية على معرفة موثّقة بمواصفة Render Blueprint، لكن
+تحققت محليًا من: أن `npm run build && npm run start` يعملان بنجاح من جذر `spruvex-site/`
+تمامًا كما سيُشغَّلان على Render، أن `next start` يلتقط `$PORT` تلقائيًا (Render يضبطه)،
+وأن `DATA_DIR` عند ضبطه لمسار مطلق (يحاكي `/var/data`) يُنشئ ملف قاعدة البيانات هناك
+فعليًا لا بمجلد المشروع. راجع لوحة Render نفسها بعد أول نشر للتأكد من التفاصيل
+الدقيقة (خصوصًا اسم الخطة اللازمة فعليًا لدعم Persistent Disk بحسابك) — التفاصيل
+والقيود موثّقة كتعليقات مباشرة داخل `render.yaml`.
+
+**المتغيرات الأربعة التالية `sync: false`** — يجب ضبطها يدويًا بلوحة Render (Environment)
+بعد أول Blueprint sync، لا تُولَّد تلقائيًا ولا تُقرأ من أي ملف بالمستودع:
+`SPRUVEX_R_API_URL`, `SPRUVEX_SITE_API_KEY` (يجب أن يطابق حرفيًا نفس القيمة بجانب
+spruvex-r), `ADMIN_PASSWORD`, `ADMIN_SESSION_SECRET`.
 
 ## الأمان والعزل
 
