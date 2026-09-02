@@ -89,6 +89,8 @@ export type CreateSpruvexRTrialResult =
       email: string;
       trialEndsAt: string;
       dashboardUrl: string;
+      /** one-time token — consumed by the dashboard after OTP verification (auto sign-in). */
+      handoffToken?: string;
       devOtp?: string;
     }
   | {
@@ -147,6 +149,7 @@ export async function createSpruvexRTrial(
       email: String(body.email),
       trialEndsAt: String(body.trialEndsAt),
       dashboardUrl: String(body.dashboardUrl),
+      handoffToken: typeof body.handoffToken === "string" ? body.handoffToken : undefined,
       devOtp: typeof body.devOtp === "string" ? body.devOtp : undefined,
     };
   }

@@ -73,6 +73,28 @@ export async function POST(req: NextRequest) {
       dashboardUrl: provisioning.dashboardUrl,
     });
     await notifyAdmin("provisioned");
+
+    // رمز الدخول لمرة واحدة (auto sign-in بعد التحقق) — يُخزَّن بكوكي
+    // httpOnly قصير العمر بدل إرساله بجسم الاستجابة (هو مؤهّل دخول كامل):
+    // المتصفح لا يستطيع قراءته، ولا يصل للوحة إلا عبر تمرير الكوكي نفسه
+    // لنقطة التحقق أدناه التي تنقله مرة واحدة للوحة التحكم ثم تُلغيه هنا.
+    if (provisioning.handoffToken) {
+      const res = NextResponse.json({
+        ok: true,
+        provisioned: true,
+        email: provisioning.email,
+        dashboardUrl: provisioning.dashboardUrl,
+      });
+      res.cookies.set("spruvex_handoff", provisioning.handoffToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: 15 * 60,
+      });
+      return res;
+    }
+
     return NextResponse.json({
       ok: true,
       provisioned: true,

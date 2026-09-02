@@ -28,6 +28,7 @@ export function TrialForm({ csrfToken }: { csrfToken: string }) {
   const [resendSending, setResendSending] = useState(false);
   const [cooldownLeft, setCooldownLeft] = useState(0);
   const [showPassword, setShowPassword] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   useEffect(() => {
     if (cooldownLeft <= 0) return;
@@ -37,6 +38,11 @@ export function TrialForm({ csrfToken }: { csrfToken: string }) {
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (!acceptedTerms) {
+      setError("يجب الموافقة على الشروط والأحكام وسياسة الخصوصية لإكمال التسجيل");
+      setPhase("error");
+      return;
+    }
     setPhase("submitting");
     setError(null);
 
@@ -54,6 +60,7 @@ export function TrialForm({ csrfToken }: { csrfToken: string }) {
           email: submittedEmail,
           password: form.get("password"),
           confirmPassword: form.get("confirmPassword"),
+          acceptedTerms: true,
           csrfToken,
         }),
       });
@@ -98,7 +105,10 @@ export function TrialForm({ csrfToken }: { csrfToken: string }) {
       }
 
       setPhase("redirecting");
-      window.location.href = dashboardUrl;
+      // redirectUrl من السيرفر: يحمل رمز دخول لمرة واحدة عبر الـhash فيهبط
+      // المستخدم داخل اللوحة مسجّلًا دخوله مباشرة. الرجوع للرابط العام لو
+      // غاب الرمز (تسجيل أقدم من الميزة) — لا شاشات موتية بأي حال.
+      window.location.href = data.redirectUrl || dashboardUrl || "/contact";
     } catch {
       setOtpError("تعذّر الاتصال بالخادم، حاول مرة أخرى");
       setPhase("otp");
@@ -154,6 +164,17 @@ export function TrialForm({ csrfToken }: { csrfToken: string }) {
           المجانية مرة واحدة لكل مطعم. سجّل الدخول بحسابك الحالي، أو تواصل معنا إن كنت تحتاج
           مساعدة.
         </p>
+        <div className="flex flex-col items-center gap-2">
+          <Button onClick={() => (window.location.href = "https://spruvex-r-dashboard.onrender.com/login")}>
+            سجّل الدخول للوحة التحكم
+          </Button>
+          <a
+            href="https://spruvex-r-dashboard.onrender.com/forgot-password"
+            className="text-xs font-bold text-[var(--color-accent-600)] hover:underline"
+          >
+            نسيت كلمة المرور؟
+          </a>
+        </div>
       </motion.div>
     );
   }
@@ -191,6 +212,11 @@ export function TrialForm({ csrfToken }: { csrfToken: string }) {
           />
 
           {otpError && <p className="text-center text-sm font-bold text-red-600">{otpError}</p>}
+
+          <p className="rounded-xl bg-[var(--color-bg)] p-3 text-center text-xs leading-relaxed text-[var(--color-muted)]">
+            لم يصل الرمز؟ تحقق من مجلد <strong>البريد المزعج (Spam)</strong> أولًا — رسائلنا تصل
+            من <span dir="ltr" className="font-bold">info@spruvex.com</span>. الرمز صالح 10 دقائق.
+          </p>
 
           <Button
             type="submit"
@@ -332,6 +358,27 @@ export function TrialForm({ csrfToken }: { csrfToken: string }) {
       </div>
 
       {error && <p className="text-sm font-bold text-red-600">{error}</p>}
+
+      <label className="flex cursor-pointer items-start gap-2.5 rounded-xl bg-[var(--color-bg)] p-3 text-xs leading-relaxed text-[var(--color-navy-900)]">
+        <input
+          type="checkbox"
+          required
+          checked={acceptedTerms}
+          onChange={(e) => setAcceptedTerms(e.target.checked)}
+          className="mt-0.5 h-4 w-4 shrink-0 accent-[var(--color-accent-500)]"
+        />
+        <span>
+          أوافق على{" "}
+          <a href="/terms" className="font-bold text-[var(--color-accent-600)] hover:underline" target="_blank" rel="noopener noreferrer">
+            الشروط والأحكام
+          </a>{" "}
+          و{" "}
+          <a href="/privacy" className="font-bold text-[var(--color-accent-600)] hover:underline" target="_blank" rel="noopener noreferrer">
+            سياسة الخصوصية
+          </a>
+          ، وأعلم أن التجربة المجانية مرة واحدة لكل نشاط.
+        </span>
+      </label>
 
       <p className="flex items-center gap-2 rounded-xl bg-[var(--color-bg)] p-3 text-xs leading-relaxed text-[var(--color-muted)]">
         <Lock className="shrink-0 text-[var(--color-accent-500)]" size={16} />

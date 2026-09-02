@@ -10,6 +10,11 @@ import { sendWelcomeEmail } from "@/lib/email";
  * وسيط (proxy) من جانب السيرفر فقط لنقطة التحقق الحقيقية بـ spruvex-r
  * (POST /api/v1/auth/register/verify) — نفس المسار الذي يستخدمه أي مستخدم
  * يسجّل ذاتيًا هناك. لا يُستدعى spruvex-r مباشرة من المتصفح أبدًا.
+ *
+ * عند نجاح التحقق: يستهلك كوكي spruvex_handoff (رمز دخول لمرة واحدة أصدره
+ * spruvex-r مع التسجيل) ويمرره للوحة عبر hash الرابط (#handoff=...) —
+ * hash لا يُرسل للسيرفرات أبدًا فلا يتسرب بسجلات/بروكسي، وتستهلكه صفحة
+ * /auth/callback هناك مرة واحدة ثم تحذفه من الرابط فورًا.
  */
 export async function POST(req: NextRequest) {
   const ip = getClientIp(req);
@@ -68,7 +73,22 @@ export async function POST(req: NextRequest) {
         `[trial-signup/verify] no local record/dashboard_url found for ${parsed.data.email} — welcome email skipped`
       );
     }
-    return NextResponse.json({ ok: true });
+
+    // الدخول التلقائي: الكوكي httpOnly يحمل رمز handoff من خطوة التسجيل —
+    // نمرره للوحة عبر hash الرابط (لا يُرسل hash عبر الشبكة أبدًا)، ونحذف
+    // الكوكي هنا فورًا (استُهلك). لو غاب الكوكي (تسجيل قديم قبل الميزة) نرجع
+    // للرابط العام كما كان — لا كسر للأثرية.
+    const handoffToken = req.cookies.get("spruvex_handoff")?.value;
+    const baseDashboardUrl = record?.dashboard_url ?? "https://spruvex-r-dashboard.onrender.com";
+    const redirectUrl = handoffToken
+      ? `${baseDashboardUrl}/auth/callback#handoff=${encodeURIComponent(handoffToken)}`
+      : `${baseDashboardUrl}/login`;
+
+    const res = NextResponse.json({ ok: true, redirectUrl });
+    if (handoffToken) {
+      res.cookies.delete("spruvex_handoff");
+    }
+    return res;
   }
 
   if (result.reason === "invalid_code") {

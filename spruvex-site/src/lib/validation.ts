@@ -27,15 +27,27 @@ export const restaurantNameSchema = z
   .min(2, "اسم المطعم قصير جدًا")
   .max(120, "اسم المطعم طويل جدًا");
 
+// يطابق تطبيع spruvex-r حرفيًا (email-normalization.ts): lowercase + نزع
+// أي `+tag` قبل @ — `user+2@gmail.com` و`user@gmail.com` نفس صندوق Gmail
+// فعليًا، فيجب أن يُعامَل كحساب واحد وإلا صار لكل بريد عدد لا نهائي من
+// "البريدات الجديدة" (ثغرة أبلغ عنها مالك المشروع بنفسه). لا نطبّع نقاط
+// Gmail — يُترك التمييز الإداري لها إن لزم مستقبلًا.
+function stripEmailTag(localDomain: string): string {
+  const at = localDomain.lastIndexOf("@");
+  if (at <= 0) return localDomain;
+  const local = localDomain.slice(0, at).replace(/\+[^@]*$/, "");
+  return `${local}${localDomain.slice(at)}`;
+}
+
 // .toLowerCase() ليطابق نفس التطبيع الذي يطبّقه spruvex-r على البريد
-// (SitePublicService: email.toLowerCase())، فلا يُعامَل Test@x.com وtest@x.com
+// (SitePublicService: normalizeEmail())، فلا يُعامَل Test@x.com وtest@x.com
 // كحسابين مختلفين عند فحص التكرار محليًا أو بجانب spruvex-r.
 export const emailSchema = z
   .string()
   .trim()
   .email("بريد إلكتروني غير صحيح")
   .max(190)
-  .transform((val) => val.toLowerCase());
+  .transform((val) => stripEmailTag(val.toLowerCase()));
 
 // نفس سياسة كلمة المرور المستخدمة بالضبط بجانب spruvex-r (RegisterDto.password
 // وPublicTrialSignupDto.password: 8+ أحرف، حرف واحد ورقم واحد على الأقل) —
@@ -59,6 +71,11 @@ export const trialSignupSchema = z
     email: emailSchema,
     password: passwordSchema,
     confirmPassword: z.string().min(1, "تأكيد كلمة المرور مطلوب"),
+    // إلزامي من جانب السيرفر أيضًا — لا يكفي تعطيل الزر بالمتصفح (سكربت
+    // آلي يتجاوز الواجهة أصلًا). الرفض هنا يمنع التسجيل الكامل بدون موافقة.
+    acceptedTerms: z.literal(true, {
+      message: "يجب الموافقة على الشروط والأحكام وسياسة الخصوصية",
+    }),
     csrfToken: z.string().min(1),
   })
   .refine((data) => data.password === data.confirmPassword, {
