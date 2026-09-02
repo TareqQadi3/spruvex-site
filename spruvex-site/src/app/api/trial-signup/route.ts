@@ -2,7 +2,6 @@ import { NextResponse, type NextRequest } from "next/server";
 import { trialSignupSchema } from "@/lib/validation";
 import {
   createTrialSignup,
-  findTrialSignupByEmail,
   markTrialSignupDuplicate,
   markTrialSignupManualReview,
   markTrialSignupProvisioned,
@@ -50,19 +49,14 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // فحص تكرار محلي قبل حتى استدعاء spruvex-r: لو هذا البريد لديه بالفعل حساب
-  // فعلي (provisioned) من طلب سابق، لا داعي لجولة شبكة جديدة ولا لسجل محلي
-  // مكرر — ولا تناسب هنا رسالة "سيتم التفعيل خلال ساعات" المُضلِّلة لأن
-  // الحساب موجود فعلًا. هذا فحص إضافي محلي، وليس بديلاً عن قيد تفرّد الجوال
-  // الحقيقي بجانب spruvex-r (الذي يبقى المرجع الحاسم ضد أي تلاعب/سباق).
-  const existing = findTrialSignupByEmail(email);
-  if (existing?.status === "provisioned") {
-    await notifyAdmin("duplicate");
-    return NextResponse.json({ ok: true, provisioned: false, alreadyRegistered: true });
-  }
-
   // سجل احتياطي/متابعة مبيعات محلي — يبقى دائمًا بغض النظر عن نجاح الخطوة
   // التالية. لا كلمة مرور هنا عمدًا — createTrialSignup لا يقبلها أصلًا.
+  //
+  // ⚠️ لا اختصار محلي لـ"مسجّل مسبقًا" هنا عمدًا: spruvex-r هو المرجع الوحيد
+  // لحالة الحساب. حساب غير موثّق وبلا Tenant (محاولة قديمة معلّقة) يجب أن
+  // يمرّ لمسار الاسترداد بجانب spruvex-r (يتبنّاه ويكمل التسجيل) — اختصار
+  // محلي سابق كان يحجبه خطأً برسالة "لديك حساب بالفعل" ويسدّ الطريق الوحيد
+  // للاسترداد. قرار "duplicate حقيقي" يبقى حصريًا لاستجابة 409 من spruvex-r.
   const localRecord = createTrialSignup({ restaurantName, phone, email, businessType });
 
   const provisioning = await createSpruvexRTrial({ restaurantName, phone, email, password, businessType });

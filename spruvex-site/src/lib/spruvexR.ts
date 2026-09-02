@@ -8,7 +8,11 @@
  */
 
 const API_PREFIX = "/api/v1";
-const REQUEST_TIMEOUT_MS = 10_000;
+// spruvex-r-api تعمل على Render free tier حاليًا — أول طلب بعد سباتها قد
+// يستغرق أكثر من 10 ثوانٍ (cold start) قبل أن تردّ. مهلة أطول قليلًا +
+// إعادة محاولة ثالثة بتأخير أكبر تغطي الاستيقاظ الكامل بدل إسقاط التسجيل
+// لـ"مراجعة يدوية" بسبب سباق استيقاظ فقط.
+const REQUEST_TIMEOUT_MS = 20_000;
 
 class SpruvexRConfigError extends Error {}
 
@@ -101,7 +105,9 @@ export type CreateSpruvexRTrialResult =
       message?: string;
     };
 
-const RETRYABLE_DELAYS_MS = [400, 900];
+// فجوات متزايدة: 400ms ثم 1s ثم 3s — الأخيرة تعطي خدمة free-tier السباتة
+// فرصة كاملة للاستيقاظ قبل الاستسلام لمسار "المراجعة اليدوية".
+const RETRYABLE_DELAYS_MS = [400, 1_000, 3_000];
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
