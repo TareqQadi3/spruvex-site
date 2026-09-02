@@ -54,11 +54,6 @@ export function Footer() {
                 ابدأ تجربة مجانية
               </Link>
             </li>
-            <li>
-              <Link href="/admin/login" className="hover:text-white">
-                دخول الإدارة
-              </Link>
-            </li>
           </ul>
         </div>
 
